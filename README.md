@@ -1,38 +1,64 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# Didcomm Mediator Testing
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This application is a NestJS-based messaging simulation system designed for testing of Didcomm Mediator and benchmarking message delivery between multiple agents. It leverages Redis for message tracking and provides metrics for message performance.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Features
 
-## Description
+1. **Agent Management**:
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+   - Dynamic creation and cleanup of agents.
+   - Establishes connections between all agents.
 
-## Installation
+2. **Message Simulation**:
+
+   - Configurable parameters for number of agents, messages per connection, and simulation duration.
+   - Concurrent and randomized message delivery.
+
+3. **Metrics and Tracking**:
+
+   - Tracks messages and their processing times in Redis.
+   - Provides detailed metrics for message performance.
+
+4. **Swagger Integration**:
+   - Fully documented API endpoints using Swagger.
+
+## Environment Variables
+
+Below are the environment variables supported by the application. These can be set in a `.env` file in the project root.
+
+| Variable           | Default Value            | Description                                                                                    |
+| ------------------ | ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `APP_PORT`         | `3001`                   | The port on which the application will run.                                                    |
+| `REDIS_URL`        | `redis://localhost:6379` | URL for the Redis instance used for message tracking.                                          |
+| `AGENT_PUBLIC_DID` | ``                       | Public DID for agent configuration.                                                            |
+| `LOG_LEVEL`        | `1`                      | Log verbosity level: <br> `1` = log, error <br> `2` = log, debug <br> `3` = log, debug, error. |
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v18+ recommended)
+- Redis (Running locally, accessible remotely)
+- Yarn (for dependency management)
+
+### Installation
+
+1. Clone the repository:
 
 ```bash
-$ yarn install
+git clone https://github.com/gabrielmatau79/didcomm-mediator-testing.git
+cd didcomm-mediator-testing
 ```
 
-## Running the app
+2. Install dependencies:
+
+```bash
+yarn install
+```
+
+3. Start Redis (if not already running) or use docker compose file
+
+4. Run the application:
 
 ```bash
 # development
@@ -45,29 +71,44 @@ $ yarn run start:dev
 $ yarn run start:prod
 ```
 
-## Test
+5. Access Swagger UI:
+   Open [http://localhost:3001/doc](http://localhost:3001/doc) in your browser.
 
-```bash
-# unit tests
-$ yarn run test
+## Usage
 
-# e2e tests
-$ yarn run test:e2e
+### Endpoints
 
-# test coverage
-$ yarn run test:cov
-```
+1. **Access Swagger UI:**:
 
-## Support
+- Access the API documentation at [http://localhost:3001/doc](http://localhost:3001/doc) in your browser.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+2. **Simulation**:
 
-## Stay in touch
+- Start a simulation with:
+  ```
+  POST /simulation-test
+  ```
+  Example payload:
+  ```
+  {
+    "messagesPerConnection": 10,
+    "timestampTestInterval": 60000,
+    "numAgent": 3,
+    "nameAgent": "Agent"
+  }
+  ```
 
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+3. **Metrics**:
 
-## License
-
-Nest is [MIT licensed](LICENSE).
+- Retrieve messages:
+  ```
+  GET /simulation-test/messages
+  ```
+- Retrieve metrics:
+  ```
+  GET /simulation-test/metrics
+  ```
+- Retrieve total metrics:
+  ```
+  GET /simulation-test/metrics/totals
+  ```

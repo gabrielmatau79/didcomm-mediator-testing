@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config'
+import { LogLevel } from '@nestjs/common'
 
 /**
  * Configuration for the application, including ports, database URIs, and service URLs.
@@ -14,14 +15,19 @@ export default registerAs('appConfig', () => ({
   appPort: parseInt(process.env.APP_PORT, 10) || 3001,
 
   /**
-   * The Redis database URL for connecting to the Redis server Single Mode.
    * Defaults to a specified local Redis instance if REDIS_URL is not set in the environment variables.
    * @type {string}
    */
   redisDbUrl: process.env.REDIS_URL || 'redis://localhost:6379',
 
   /**
-   *Allows set threshold time to execute TEST on milisecond
+   * Define DID:WEB to connect and Configure Agents
    */
-  timestampTestInterval: parseInt(process.env.TIMESTAMP_TEST_INTERVAL) || 60000,
+  publicDid: process.env.AGENT_PUBLIC_DID || 'did:web:ca.dev.2060.io',
+
+  /**
+   * Configure Log Level of the aplication
+   */
+
+  LogLevel: process.env.LOG_LEVEL || 1,
 }))

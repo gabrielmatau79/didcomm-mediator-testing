@@ -1,8 +1,9 @@
 import { LogLevel, Logger } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 
 export function getLogLevels(): LogLevel[] {
   const logger = new Logger('getLogLevels')
-  const logLevelConfig = parseInt(process.env.LOG_LEVEL, 10) || 3
+  const logLevelConfig = parseInt(process.env.LOG_LEVEL, 10) || 1
 
   const logLevels: LogLevel[] = ['log'] // Default to 'log'
 

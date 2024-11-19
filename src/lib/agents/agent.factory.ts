@@ -3,18 +3,22 @@ import { Agent, WsOutboundTransport, AgentEventTypes, ConsoleLogger, LogLevel } 
 import { AskarModule } from '@credo-ts/askar'
 import { agentDependencies } from '@credo-ts/node'
 import { ariesAskar } from '@hyperledger/aries-askar-nodejs'
-import * as fs from 'fs'
 import { ConnectionsModule, MediationRecipientModule, MediatorPickupStrategy } from '@credo-ts/core'
 import { AgentMessageSentEvent, AgentMessageProcessedEvent } from '@credo-ts/core'
 import { InjectRedis } from '@nestjs-modules/ioredis'
+import * as fs from 'fs'
 import Redis from 'ioredis'
+import { ConfigService } from '@nestjs/config'
 
 @Injectable()
 export class AgentFactory {
   private logDir = `${process.cwd()}/logs_test`
   private logger: ConsoleLogger
 
-  constructor(@InjectRedis() private readonly redisClient: Redis) {
+  constructor(
+    @InjectRedis() private readonly redisClient: Redis,
+    private configService: ConfigService,
+  ) {
     this.logger = new ConsoleLogger(LogLevel.debug)
     fs.mkdirSync(this.logDir, { recursive: true })
   }
@@ -71,7 +75,7 @@ export class AgentFactory {
   }
 
   private async setupMediation(agent: Agent<any>, tenantId: string, logStream: fs.WriteStream): Promise<void> {
-    const publicDid = process.env.AGENT_PUBLIC_DID || 'did:web:ca.dev.2060.io'
+    const publicDid = this.configService.get('appConfig.publicDid')
 
     if (!publicDid) {
       const error = new Error('Mediator DID URL is not configured')

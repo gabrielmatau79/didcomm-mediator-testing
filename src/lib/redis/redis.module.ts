@@ -13,7 +13,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config'
 
         return {
           type: 'single',
-          url: configService.get<string>('REDIS_URL', 'redis://localhost:6379'),
+          url: configService.get<string>('appConfig.redisDbUrl'),
           options: {
             connectTimeout: 10000,
             maxRetriesPerRequest: 5,
