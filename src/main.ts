@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core'
 import { AppModule } from './app.module'
 import { ConfigService } from '@nestjs/config'
-import { Logger, VersioningType } from '@nestjs/common'
+import { Logger, ValidationPipe, VersioningType } from '@nestjs/common'
 import { getLogLevels } from './config/logger.config'
 import * as fs from 'fs'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
@@ -27,6 +27,16 @@ async function bootstrap(): Promise<void> {
   app.enableVersioning({
     type: VersioningType.URI,
   })
+
+  //Validations DTO
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      disableErrorMessages: false,
+    }),
+  )
 
   /**
    * Documentation Builder

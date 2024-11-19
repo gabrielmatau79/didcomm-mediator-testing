@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Res, HttpStatus, Get } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger'
 import { SimulationTestService } from './simulation-test.service'
+import { SimulateTestDto } from './dto/simulate-test.dto'
 
 @ApiTags('Simulation Test')
 @Controller('simulation-test')
@@ -25,20 +26,22 @@ export class SimulationTestController {
   @Post()
   async simulate(
     @Body()
-    config: {
-      messagesPerConnection: number
-      timestampTestInterval: number
-      numAgent: number
-      nameAgent: string
-    },
+    config: SimulateTestDto,
     @Res() res: any,
   ) {
     try {
-      console.log(`messagesPeerConnection value: ${config.messagesPerConnection}`)
-      const result = await this.simulationTestService.simulateTest(config)
-      return res.status(HttpStatus.OK).json(result)
+      console.log(`messagesPerConnection value: ${config.messagesPerConnection}`)
+
+      // Start the simulation test in the background
+      this.simulationTestService.simulateTest(config).catch((error) => {
+        console.error(`Simulation test failed: ${error.message}`)
+      })
+
+      return res.status(HttpStatus.OK).json({
+        status: 'Simulation test is running',
+      })
     } catch (error) {
-      return res.status(HttpStatus.BAD_REQUEST).json({ status: false, error: error.message })
+      return res.status(HttpStatus.BAD_REQUEST).json({ status: 'error', error: error.message })
     }
   }
 
@@ -88,6 +91,32 @@ export class SimulationTestController {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         status: 'error',
         message: 'Failed to fetch total metrics',
+        error: error.message,
+      })
+    }
+  }
+
+  @Post('clear-database')
+  @ApiOperation({ summary: 'Clear the Redis database after testing' })
+  @ApiResponse({
+    status: 200,
+    description: 'The database was cleared successfully.',
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'An error occurred while clearing the database.',
+  })
+  async clearDatabase(@Res() res: any) {
+    try {
+      await this.simulationTestService.clearDatabase()
+      return res.status(HttpStatus.OK).json({
+        status: 'success',
+        message: 'Database cleared successfully.',
+      })
+    } catch (error) {
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        status: 'error',
+        message: 'Failed to clear database',
         error: error.message,
       })
     }

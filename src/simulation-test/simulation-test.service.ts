@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { TenantsService } from '../tenants/tenants.service'
 import Redis from 'ioredis'
 import { InjectRedis } from '@nestjs-modules/ioredis'
+import { SimulateTestDto } from './dto/simulate-test.dto'
 
 @Injectable()
 export class SimulationTestService {
@@ -13,12 +14,13 @@ export class SimulationTestService {
   ) {}
 
   /**
-   * Simulate a test involving multiple agents, connections, and concurrent message exchanges.
-   * @param mensajesPeerConnection Number of messages per connection.
-   * @param timestampTestInterval Total duration of the test (ms).
-   * @param numAgent Number of agents to create.
-   * @param nameAgent Base name for the agents.
-   * @returns Metrics of the simulation.
+   * Simulates a test involving multiple agents, connections, and message exchanges.
+   * @param messagesPerConnection - Number of messages per connection.
+   * @param timestampTestInterval - Total duration of the test (in milliseconds).
+   * @param numAgent - Number of agents to create.
+   * @param nameAgent - Base name for the agents.
+   * @param messageRate - Optional rate at which messages are sent (in milliseconds).
+   * @returns Status of the simulation.
    */
   async simulateTest({
     messagesPerConnection,
@@ -26,28 +28,20 @@ export class SimulationTestService {
     numAgent,
     nameAgent,
     messageRate = 100,
-  }: {
-    messagesPerConnection: number
-    timestampTestInterval: number
-    numAgent: number
-    nameAgent: string
-    messageRate?: number
-  }): Promise<{ status: string }> {
-    this.logger.debug('Starting simulation test...')
+  }: SimulateTestDto): Promise<{ status: string }> {
+    this.logger.debug('[simulateTest] Starting simulation test...')
 
-    // Step 1: Generate agent IDs based on numAgent and nameAgent
+    // Step 1: Generate agent IDs and create agents
     const agentIds = await this.createAgents(numAgent, nameAgent)
-
-    this.logger.debug(`Agents involved in simulation: ${agentIds}`)
+    this.logger.debug(`[simulateTest] Agents created: ${agentIds.join(', ')}`)
 
     try {
       // Step 2: Establish connections between all agents
-      this.logger.debug('Establishing connections...')
+      this.logger.debug('[simulateTest] Establishing connections...')
       await this.connectAllAgents(agentIds)
 
-      // Step 3: Send messages concurrently within the total duration
-      this.logger.debug('Sending messages concurrently...')
-
+      // Step 3: Send messages concurrently for the specified duration
+      this.logger.debug('[simulateTest] Sending messages...')
       const startTime = Date.now()
       const endTime = startTime + timestampTestInterval
 
@@ -56,13 +50,9 @@ export class SimulationTestService {
           let messageCount = 0
 
           while (Date.now() < endTime) {
-            this.logger.debug(`Agent ${fromAgent} sending messages batch...`)
-
-            this.logger.debug(`messagesPeerConnection value: ${messagesPerConnection}`)
-
+            this.logger.debug(`[simulateTest] Agent ${fromAgent} sending batch of messages...`)
             await Promise.all(
               Array.from({ length: messagesPerConnection }, async (_, i) => {
-                this.logger.debug(`messagesPeerConnection ${fromAgent} `)
                 const toAgent = this.getRandomConnection(fromAgent, agentIds)
 
                 try {
@@ -71,159 +61,146 @@ export class SimulationTestService {
                     toAgent,
                     `Message #${++messageCount} from ${fromAgent} to ${toAgent}`,
                   )
-                  this.logger.log(`Message #${messageCount} sent successfully from ${fromAgent} to ${toAgent}`)
                   await new Promise((resolve) => setTimeout(resolve, messageRate))
+                  this.logger.log(`[simulateTest] Message #${messageCount} sent from ${fromAgent} to ${toAgent}`)
                 } catch (error) {
                   this.logger.error(
-                    `Failed to send message #${messageCount} from ${fromAgent} to ${toAgent}: ${error.message}`,
+                    `[simulateTest] Failed to send message #${messageCount} from ${fromAgent} to ${toAgent}: ${error.message}`,
                   )
                 }
+                await new Promise((resolve) => setTimeout(resolve, messageRate))
               }),
             )
-
-            // Pause between batches
-            await new Promise((resolve) => setTimeout(resolve, messageRate))
           }
         }),
       )
 
-      return {
-        status: 'Simulation completed',
-      }
+      return { status: 'Simulation completed' }
     } catch (error) {
-      this.logger.error('Simulation test failed:', error)
-      throw new Error('Simulation test failed')
+      this.logger.error(`[simulateTest] Simulation test failed: ${error.message}`)
+      throw new Error('[simulateTest] Simulation test failed')
     } finally {
-      // Step 4: Clean up and delete agents sequentially
-      this.logger.debug('Deleting agents...')
+      // Step 4: Clean up and delete agents
+      this.logger.debug('[simulateTest] Cleaning up agents...')
       for (const agentId of agentIds) {
         try {
           await this.tenantsService.deleteTenant(agentId)
-          this.logger.log(`Agent deleted: ${agentId}`)
+          this.logger.log(`[simulateTest] Agent deleted: ${agentId}`)
         } catch (error) {
-          this.logger.error(`Failed to delete agent ${agentId}: ${error.message}`)
+          this.logger.error(`[simulateTest] Failed to delete agent ${agentId}: ${error.message}`)
         }
       }
     }
   }
 
   /**
-   * Retrieve all messages stored in Redis.
-   * @returns List of all messages with their details.
+   * Retrieves all messages stored in Redis.
+   * @returns A list of messages with details.
    */
   async getAllMessages(): Promise<any[]> {
-    this.logger.debug('Fetching all messages from Redis...')
+    this.logger.debug('[getAllMessages] Fetching all messages from Redis...')
     try {
-      // Fetch all keys matching the message pattern
       const keys = await this.redisClient.keys('message:*')
-
-      // Retrieve and parse each message
       const messages = await Promise.all(
         keys.map(async (key) => {
           const message = await this.redisClient.get(key)
           return message ? JSON.parse(message) : null
         }),
       )
-
-      // Filter out any null values (in case of errors or missing messages)
-      const filteredMessages = messages.filter((message) => message !== null)
-
-      this.logger.log(`Fetched ${filteredMessages.length} messages from Redis`)
-      return filteredMessages
+      this.logger.log(`[getAllMessages] Fetched ${messages.length} messages.`)
+      return messages.filter((message) => message !== null)
     } catch (error) {
-      this.logger.error(`Error fetching messages from Redis: ${error.message}`)
-      throw new Error('Failed to retrieve messages from Redis')
+      this.logger.error(`[getAllMessages] Error fetching messages: ${error.message}`)
+      throw new Error('[getAllMessages] Failed to retrieve messages')
     }
   }
 
+  /**
+   * Establishes connections between all agents.
+   * @param agentIds - List of agent IDs.
+   */
   async connectAllAgents(agentIds: string[]): Promise<void> {
-    this.logger.debug('Establishing connections between all agents...')
+    this.logger.debug('[connectAllAgents] Connecting all agents...')
     for (let i = 0; i < agentIds.length; i++) {
       for (let j = i + 1; j < agentIds.length; j++) {
-        const fromAgent = agentIds[i]
-        const toAgent = agentIds[j]
-
         try {
-          await this.tenantsService.createConnection(fromAgent, toAgent)
-          this.logger.log(`Connection established between ${fromAgent} and ${toAgent}`)
+          await this.tenantsService.createConnection(agentIds[i], agentIds[j])
+          this.logger.log(`[connectAllAgents] Connection established between ${agentIds[i]} and ${agentIds[j]}`)
         } catch (error) {
-          this.logger.error(`Failed to establish connection between ${fromAgent} and ${toAgent}: ${error.message}`)
-          throw new Error(`Connection establishment failed between ${fromAgent} and ${toAgent}: ${error.message}`)
+          this.logger.error(`[connectAllAgents] Failed to connect ${agentIds[i]} and ${agentIds[j]}: ${error.message}`)
+          throw new Error('[connectAllAgents] Connection setup failed')
         }
       }
     }
   }
 
   /**
-   * Get a random connection from the list of connections for an agent.
-   * Ensures the connection is valid and does not include the sender agent.
-   * @param fromAgent The ID of the sender agent.
-   * @param agentIds List of all agent IDs.
-   * @returns A randomly selected agent ID to send the message.
+   * Generates and creates agents.
+   * @param numAgent - Number of agents.
+   * @param nameAgent - Base name for agents.
+   * @returns List of agent IDs.
    */
-  private getRandomConnection(fromAgent: string, agentIds: string[]): string {
-    const possibleConnections = agentIds.filter((agent) => agent !== fromAgent)
-    const randomIndex = Math.floor(Math.random() * possibleConnections.length)
-    return possibleConnections[randomIndex]
+  private async createAgents(numAgent: number, nameAgent: string): Promise<string[]> {
+    const agentIds = Array.from({ length: numAgent }, (_, i) => `${nameAgent}-${i + 1}`)
+    this.logger.debug(`[createAgents] Generated agent IDs: ${agentIds.join(', ')}`)
+
+    for (const agentId of agentIds) {
+      try {
+        await this.tenantsService.createTenant(agentId, {})
+        this.logger.log(`[createAgents] Agent created: ${agentId}`)
+      } catch (error) {
+        this.logger.error(`[createAgents] Failed to create agent ${agentId}: ${error.message}`)
+        throw new Error(`[createAgents] Agent creation failed: ${error.message}`)
+      }
+    }
+
+    return agentIds
   }
 
-  async calculateMetricsByAgent(): Promise<any> {
-    this.logger.debug('Calculating metrics grouped by agent from Redis...')
+  /**
+   * Clears all keys from the Redis database.
+   */
+  async clearDatabase(): Promise<void> {
     try {
-      // Fetch all message keys
-      const keys = await this.redisClient.keys('message:*')
-
-      if (keys.length === 0) {
-        this.logger.warn('No messages found in Redis for statistics')
-        return []
-      }
-
-      const metricsByAgent: Record<string, { toTenantId: string; message: string; processingTimeMs: number | null }[]> =
-        {}
-
-      // Process each message
-      for (const key of keys) {
-        const messageData = await this.redisClient.get(key)
-        if (messageData) {
-          const message = JSON.parse(messageData)
-          const { fromTenantId, toTenantId, message: content, processingTimeMs } = message
-
-          // Initialize the agent group if it doesn't exist
-          if (!metricsByAgent[fromTenantId]) {
-            metricsByAgent[fromTenantId] = []
-          }
-
-          // Add the message details to the agent's group
-          metricsByAgent[fromTenantId].push({
-            toTenantId,
-            message: content,
-            processingTimeMs: processingTimeMs || null,
-          })
-        }
-      }
-
-      this.logger.log('Metrics grouped by agent successfully calculated')
-      return metricsByAgent
+      this.logger.log('[clearDatabase] Clearing Redis database...')
+      await this.redisClient.flushall()
+      this.logger.log('[clearDatabase] Redis database cleared successfully.')
     } catch (error) {
-      this.logger.error(`Error calculating grouped metrics: ${error.message}`)
-      throw new Error('Failed to calculate grouped metrics from Redis')
+      this.logger.error('[clearDatabase] Failed to clear Redis database:', error.message)
+      throw new Error('[clearDatabase] Error clearing Redis database')
     }
   }
 
+  /**
+   * Gets a random connection for a specific agent.
+   * @param fromAgent - Agent initiating the message.
+   * @param agentIds - List of agent IDs.
+   * @returns Randomly selected target agent ID.
+   */
+  private getRandomConnection(fromAgent: string, agentIds: string[]): string {
+    const connections = agentIds.filter((agent) => agent !== fromAgent)
+    return connections[Math.floor(Math.random() * connections.length)]
+  }
+
+  /**
+   * Calculates total metrics for all agents based on messages stored in Redis.
+   * @returns Total metrics including total messages and average processing time per agent.
+   * @throws Error if metrics calculation fails.
+   */
   async calculateTotals(): Promise<any> {
     this.logger.debug('Calculating total metrics from Redis...')
     try {
-      // Fetch all message keys
+      // Fetch all message keys from Redis
       const keys = await this.redisClient.keys('message:*')
 
       if (keys.length === 0) {
-        this.logger.warn('No messages found in Redis for statistics')
+        this.logger.warn('No messages found in Redis for total metrics calculation.')
         return {}
       }
 
       const totals: Record<string, { totalMessages: number; averageProcessingTimeMs: number }> = {}
 
-      // Process each message
+      // Process each message key to calculate totals
       for (const key of keys) {
         const messageData = await this.redisClient.get(key)
         if (messageData) {
@@ -235,6 +212,7 @@ export class SimulationTestService {
             totals[fromTenantId] = { totalMessages: 0, averageProcessingTimeMs: 0 }
           }
 
+          // Update total messages and aggregate processing time
           totals[fromTenantId].totalMessages++
           if (processingTimeMs) {
             totals[fromTenantId].averageProcessingTimeMs += processingTimeMs
@@ -242,7 +220,7 @@ export class SimulationTestService {
         }
       }
 
-      // Calculate average processing times
+      // Calculate average processing time for each agent
       for (const agentId of Object.keys(totals)) {
         const { totalMessages, averageProcessingTimeMs } = totals[agentId]
         if (totalMessages > 0) {
@@ -250,35 +228,59 @@ export class SimulationTestService {
         }
       }
 
-      this.logger.log('Total metrics successfully calculated')
+      this.logger.log('Total metrics successfully calculated.')
       return totals
     } catch (error) {
       this.logger.error(`Error calculating total metrics: ${error.message}`)
-      throw new Error('Failed to calculate total metrics from Redis')
+      throw new Error('Failed to calculate total metrics from Redis.')
     }
   }
 
   /**
-   * Generates and creates agents.
-   * @param numAgent - Number of agents to create.
-   * @param nameAgent - Base name for the agents.
-   * @returns A list of agent IDs.
+   * Calculates metrics grouped by agent based on messages stored in Redis.
+   * @returns Metrics grouped by agents, including message details and processing times.
+   * @throws Error if metrics calculation fails.
    */
-  private async createAgents(numAgent: number, nameAgent: string): Promise<string[]> {
-    const agentIds = Array.from({ length: numAgent }, (_, i) => `${nameAgent}-${i + 1}`)
-    this.logger.debug(`Generated agent IDs: ${agentIds.join(', ')}`)
+  async calculateMetricsByAgent(): Promise<any> {
+    this.logger.debug('Calculating metrics grouped by agent from Redis...')
+    try {
+      // Fetch all message keys stored in Redis
+      const keys = await this.redisClient.keys('message:*')
 
-    this.logger.debug('Creating agents...')
-    for (const agentId of agentIds) {
-      try {
-        await this.tenantsService.createTenant(agentId, {})
-        this.logger.log(`Agent created: ${agentId}`)
-      } catch (error) {
-        this.logger.error(`Failed to create agent ${agentId}: ${error.message}`)
-        throw new Error(`Agent creation failed: ${error.message}`)
+      if (keys.length === 0) {
+        this.logger.warn('No messages found in Redis for metrics calculation.')
+        return []
       }
-    }
 
-    return agentIds
+      const metricsByAgent: Record<string, { toTenantId: string; message: string; processingTimeMs: number | null }[]> =
+        {}
+
+      // Process each message key to build metrics
+      for (const key of keys) {
+        const messageData = await this.redisClient.get(key)
+        if (messageData) {
+          const message = JSON.parse(messageData)
+          const { fromTenantId, toTenantId, message: content, processingTimeMs } = message
+
+          // Initialize the agent's metrics group if it doesn't exist
+          if (!metricsByAgent[fromTenantId]) {
+            metricsByAgent[fromTenantId] = []
+          }
+
+          // Add the message details to the agent's metrics group
+          metricsByAgent[fromTenantId].push({
+            toTenantId,
+            message: content,
+            processingTimeMs: processingTimeMs || null,
+          })
+        }
+      }
+
+      this.logger.log('Metrics grouped by agent successfully calculated.')
+      return metricsByAgent
+    } catch (error) {
+      this.logger.error(`Error calculating grouped metrics: ${error.message}`)
+      throw new Error('Failed to calculate grouped metrics from Redis.')
+    }
   }
 }
