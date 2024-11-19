@@ -1,10 +1,27 @@
 import { Controller, Post, Body, Res, HttpStatus, Get } from '@nestjs/common'
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger'
 import { SimulationTestService } from './simulation-test.service'
 
+@ApiTags('Simulation Test')
 @Controller('simulation-test')
 export class SimulationTestController {
   constructor(private readonly simulationTestService: SimulationTestService) {}
 
+  @ApiOperation({ summary: 'Simulate a messaging test between agents' })
+  @ApiBody({
+    description: 'Configuration for the simulation test',
+    schema: {
+      type: 'object',
+      properties: {
+        messagesPerConnection: { type: 'number', example: 5, description: 'Messages per connection' },
+        timestampTestInterval: { type: 'number', example: 60000, description: 'Test duration in milliseconds' },
+        numAgent: { type: 'number', example: 3, description: 'Number of agents to create' },
+        nameAgent: { type: 'string', example: 'Agent', description: 'Base name for agents' },
+      },
+    },
+  })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Simulation completed successfully' })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input or simulation failed' })
   @Post()
   async simulate(
     @Body()
@@ -25,10 +42,9 @@ export class SimulationTestController {
     }
   }
 
-  /**
-   * Endpoint to fetch all messages stored in Redis.
-   * @returns List of messages with details.
-   */
+  @ApiOperation({ summary: 'Fetch all messages stored in Redis' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Messages retrieved successfully' })
+  @ApiResponse({ status: HttpStatus.INTERNAL_SERVER_ERROR, description: 'Failed to fetch messages' })
   @Get('messages')
   async getAllMessages(@Res() res: any) {
     try {
@@ -43,6 +59,9 @@ export class SimulationTestController {
     }
   }
 
+  @ApiOperation({ summary: 'Fetch metrics grouped by agent' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Metrics retrieved successfully' })
+  @ApiResponse({ status: HttpStatus.INTERNAL_SERVER_ERROR, description: 'Failed to fetch metrics' })
   @Get('metrics')
   async getMetrics(@Res() res: any) {
     try {
@@ -57,6 +76,9 @@ export class SimulationTestController {
     }
   }
 
+  @ApiOperation({ summary: 'Fetch total metrics' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Total metrics retrieved successfully' })
+  @ApiResponse({ status: HttpStatus.INTERNAL_SERVER_ERROR, description: 'Failed to fetch total metrics' })
   @Get('metrics/totals')
   async getTotals(@Res() res: any) {
     try {

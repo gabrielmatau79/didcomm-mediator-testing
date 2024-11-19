@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config'
 import { Logger, VersioningType } from '@nestjs/common'
 import { getLogLevels } from './config/logger.config'
 import * as fs from 'fs'
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 
 /**
  * Bootstraps the NestJS application, setting up configurations, middleware, and documentation.
@@ -26,6 +27,20 @@ async function bootstrap(): Promise<void> {
   app.enableVersioning({
     type: VersioningType.URI,
   })
+
+  /**
+   * Documentation Builder
+   */
+
+  const config = new DocumentBuilder()
+    .setTitle('Didcomm Mediator Testing')
+    .setDescription('API to testing DidComm Mediator')
+    .setVersion('1.1')
+    .addTag('Simulation Test')
+    .addTag('Tenants')
+    .build()
+  const document = SwaggerModule.createDocument(app, config)
+  SwaggerModule.setup('doc', app, document)
 
   // Enable Cross-Origin Resource Sharing (CORS)
   app.enableCors()
