@@ -374,7 +374,7 @@
   resolved "https://registry.yarnpkg.com/@colors/colors/-/colors-1.5.0.tgz#bb504579c1cae923e6576a4f5da43d25f97bdbd9"
   integrity sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==
 
-"@credo-ts/askar@^0.5.13":
+"@credo-ts/askar@^0.5.11":
   version "0.5.13"
   resolved "https://registry.yarnpkg.com/@credo-ts/askar/-/askar-0.5.13.tgz#55165259e6ca2a27125a64b1f708860a9106cad3"
   integrity sha512-w8I7gB+Em8ME+4OHK9Ulz8wXvXzFw0P00dHcWuo1jKmHX6pz3u3Nbdag7PzDplE4Nzu19hgZPY91ndRql+4euw==
@@ -386,7 +386,7 @@
     rxjs "^7.8.0"
     tsyringe "^4.8.0"
 
-"@credo-ts/core@0.5.13", "@credo-ts/core@^0.5.13":
+"@credo-ts/core@0.5.13", "@credo-ts/core@^0.5.11":
   version "0.5.13"
   resolved "https://registry.yarnpkg.com/@credo-ts/core/-/core-0.5.13.tgz#80b101cdcb81d657ddb5dea0fba173ed4c3e1bae"
   integrity sha512-TBmcbL7ftEF+7ccxJDFYeCObK8ap8McefJe+zwXqXFerfCH2RHxK45Vyfw5ltPoVxkud05fohjzoWWTZgYQkEQ==
@@ -434,7 +434,7 @@
     web-did-resolver "^2.0.21"
     webcrypto-core "^1.8.0"
 
-"@credo-ts/node@^0.5.13":
+"@credo-ts/node@^0.5.11":
   version "0.5.13"
   resolved "https://registry.yarnpkg.com/@credo-ts/node/-/node-0.5.13.tgz#55eb96e88476c59f7bfa86ace22dc1fd145aa843"
   integrity sha512-CeE84CfSyCFB++OYepenye1HpgVpPftkCtKb/u1N7AvEAshsnT2E7cOprt1ToPGuOF/neFi/ImGF0IDNPhgHaQ==
@@ -682,7 +682,7 @@
   resolved "https://registry.yarnpkg.com/@humanwhocodes/object-schema/-/object-schema-2.0.3.tgz#4a2868d75d6d6963e423bcf90b7fd1be343409d3"
   integrity sha512-93zYdMES/c1D69yZiKDBj0V24vqNzB/koF26KPaagAfd3P/4gUlh3Dys5ogAK+Exi9QyzlD8x/08Zt7wIKcDcA==
 
-"@hyperledger/aries-askar-nodejs@^0.2.3":
+"@hyperledger/aries-askar-nodejs@^0.2.2":
   version "0.2.3"
   resolved "https://registry.yarnpkg.com/@hyperledger/aries-askar-nodejs/-/aries-askar-nodejs-0.2.3.tgz#f939c19047c78b9903b422f992b4f5406ac3aae3"
   integrity sha512-2BnGqK08Y96DEB8tDuXy2x+soetChyMGB0+L1yqdHx1Xv5FvRerYrTXdTjJXTW6ANb48k2Np8WlJ4YNePSo6ww==
@@ -1692,9 +1692,9 @@
   integrity sha512-/pyBZWSLD2n0dcHE3hq8s8ZvcETHtEuF+3E7XVt0Ig2nvsVQXdghHVcEkIWjy9A0wKfTn97a/PSDYohKIlnP/w==
 
 "@types/node@*":
-  version "22.9.0"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-22.9.0.tgz#b7f16e5c3384788542c72dc3d561a7ceae2c0365"
-  integrity sha512-vuyHg81vvWA1Z1ELfvLko2c8f34gyA0zaic0+Rllc5lbCnbSyuvb2Oxpm6TAUAC/2xZN3QGqxBNggD1nNR2AfQ==
+  version "22.9.1"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-22.9.1.tgz#bdf91c36e0e7ecfb7257b2d75bf1b206b308ca71"
+  integrity sha512-p8Yy/8sw1caA8CdRIQBG5tiLHmxtQKObCijiAa9Ez+d4+PRffM4054xbju0msf+cvhJpnFEeNjxmVT/0ipktrg==
   dependencies:
     undici-types "~6.19.8"
 

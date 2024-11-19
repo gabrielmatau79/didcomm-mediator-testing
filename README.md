@@ -112,3 +112,35 @@ $ yarn run start:prod
   ```
   GET /simulation-test/metrics/totals
   ```
+
+## Docker Setup
+
+### Building the Docker Image
+
+To build the Docker image for this application, use the following command:
+
+```bash
+docker build -t didcomm-mediator-testing:test .
+```
+
+### Using Docker Compose
+
+To run the application with Docker Compose, execute:
+
+```bash
+docker-compose up --build
+```
+
+This command will:
+
+- Build the application image.
+- Start the application and Redis services.
+- Expose the application on http://localhost:3001
+
+### Stopping the Services
+
+To stop and remove the containers, run:
+
+```bash
+docker-compose down
+```

@@ -20,10 +20,10 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@credo-ts/askar": "^0.5.13",
-    "@credo-ts/core": "^0.5.13",
-    "@credo-ts/node": "^0.5.13",
-    "@hyperledger/aries-askar-nodejs": "^0.2.3",
+    "@credo-ts/askar": "^0.5.11",
+    "@credo-ts/core": "^0.5.11",
+    "@credo-ts/node": "^0.5.11",
+    "@hyperledger/aries-askar-nodejs": "^0.2.2",
     "@nestjs-modules/ioredis": "^2.0.2",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.3.0",
