@@ -52,6 +52,7 @@ export class TenantsService {
    * @returns An array of tenant IDs.
    */
   listTenants(): string[] {
+    this.logger.log(`[listTenants] Initialize...`)
     return Object.keys(this.tenants)
   }
 

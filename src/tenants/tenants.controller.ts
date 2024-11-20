@@ -35,7 +35,7 @@ export class TenantsController {
   @ApiOperation({ summary: 'List all tenants' })
   @ApiResponse({ status: HttpStatus.OK, description: 'List of tenants retrieved successfully' })
   @Get()
-  listTenants() {
+  async listTenants() {
     return this.tenantsService.listTenants()
   }
 
