@@ -14,14 +14,13 @@ export class TenantsController {
       type: 'object',
       properties: {
         tenantId: { type: 'string', example: 'tenant-123' },
-        config: { type: 'object', example: { key: 'value' } },
       },
     },
   })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Tenant created successfully' })
   @Post()
-  createTenant(@Body('tenantId') tenantId: string, @Body('config') config: any) {
-    return this.tenantsService.createTenant(tenantId, config)
+  createTenant(@Body('tenantId') tenantId: string) {
+    return this.tenantsService.createTenant(tenantId)
   }
 
   @ApiOperation({ summary: 'Get details of a tenant' })

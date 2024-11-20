@@ -54,7 +54,7 @@ export class SimulationTestService {
             await Promise.all(
               Array.from({ length: messagesPerConnection }, async (_, i) => {
                 const toAgent = this.getRandomConnection(fromAgent, agentIds)
-
+                this.logger.log(`[simulateTest] Message #${i} ${_ ?? ''}`)
                 try {
                   await this.tenantsService.sendMessage(
                     fromAgent,
@@ -80,6 +80,8 @@ export class SimulationTestService {
       this.logger.error(`[simulateTest] Simulation test failed: ${error.message}`)
       throw new Error('[simulateTest] Simulation test failed')
     } finally {
+      this.logger.debug('[simulateTest] Await 1 minute agents to end...')
+      await new Promise((resolve) => setTimeout(resolve, 60000))
       // Step 4: Clean up and delete agents
       this.logger.debug('[simulateTest] Cleaning up agents...')
       for (const agentId of agentIds) {
@@ -146,7 +148,7 @@ export class SimulationTestService {
 
     for (const agentId of agentIds) {
       try {
-        await this.tenantsService.createTenant(agentId, {})
+        await this.tenantsService.createTenant(agentId)
         this.logger.log(`[createAgents] Agent created: ${agentId}`)
       } catch (error) {
         this.logger.error(`[createAgents] Failed to create agent ${agentId}: ${error.message}`)

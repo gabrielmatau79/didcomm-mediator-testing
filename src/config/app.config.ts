@@ -1,5 +1,4 @@
 import { registerAs } from '@nestjs/config'
-import { LogLevel } from '@nestjs/common'
 
 /**
  * Configuration for the application, including ports, database URIs, and service URLs.

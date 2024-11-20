@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Res, HttpStatus, Get } from '@nestjs/common'
+import { Controller, Post, Body, Res, HttpStatus, Get, Logger } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger'
 import { SimulationTestService } from './simulation-test.service'
 import { SimulateTestDto } from './dto/simulate-test.dto'
@@ -6,6 +6,7 @@ import { SimulateTestDto } from './dto/simulate-test.dto'
 @ApiTags('Simulation Test')
 @Controller('simulation-test')
 export class SimulationTestController {
+  private readonly logger = new Logger(SimulationTestController.name)
   constructor(private readonly simulationTestService: SimulationTestService) {}
 
   @ApiOperation({ summary: 'Simulate a messaging test between agents' })
@@ -30,11 +31,9 @@ export class SimulationTestController {
     @Res() res: any,
   ) {
     try {
-      console.log(`messagesPerConnection value: ${config.messagesPerConnection}`)
-
       // Start the simulation test in the background
       this.simulationTestService.simulateTest(config).catch((error) => {
-        console.error(`Simulation test failed: ${error.message}`)
+        this.logger.error(`Simulation test failed: ${error.message}`)
       })
 
       return res.status(HttpStatus.OK).json({

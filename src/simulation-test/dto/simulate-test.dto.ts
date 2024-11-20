@@ -1,4 +1,4 @@
-import { IsNumber, IsString, Min, Max, IsOptional } from 'class-validator'
+import { IsNumber, IsString, Min, IsOptional } from 'class-validator'
 import { ApiProperty } from '@nestjs/swagger'
 
 export class SimulateTestDto {

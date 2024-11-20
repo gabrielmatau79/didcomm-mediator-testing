@@ -21,7 +21,7 @@ export class TenantsService {
    * @returns An object containing the creation status.
    * @throws Error if the tenant already exists.
    */
-  async createTenant(tenantId: string, config: any): Promise<{ status: string }> {
+  async createTenant(tenantId: string): Promise<{ status: string }> {
     if (this.tenants[tenantId]) {
       this.logger.error(`[createTenant] Tenant ${tenantId} already exists`)
       throw new Error(`[createTenant] Tenant ${tenantId} already exists`)

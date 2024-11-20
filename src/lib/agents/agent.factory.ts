@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { Agent, WsOutboundTransport, AgentEventTypes, ConsoleLogger, LogLevel } from '@credo-ts/core'
 import { AskarModule } from '@credo-ts/askar'
 import { agentDependencies } from '@credo-ts/node'
