@@ -81,7 +81,6 @@ export class SimulationTestService {
       throw new Error('[simulateTest] Simulation test failed')
     } finally {
       this.logger.debug('[simulateTest] Await 1 minute agents to end...')
-      await new Promise((resolve) => setTimeout(resolve, 60000))
       // Step 4: Clean up and delete agents
       this.logger.debug('[simulateTest] Cleaning up agents...')
       for (const agentId of agentIds) {

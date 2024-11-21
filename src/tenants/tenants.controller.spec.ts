@@ -34,11 +34,10 @@ describe('TenantsController', () => {
   describe('createTenant', () => {
     it('should call TenantsService.createTenant and return its result', async () => {
       const tenantId = 'Tenant1'
-      const config = {}
 
-      const result = await controller.createTenant(tenantId, config)
+      const result = await controller.createTenant(tenantId)
 
-      expect(service.createTenant).toHaveBeenCalledWith(tenantId, config)
+      expect(service.createTenant).toHaveBeenCalledWith(tenantId)
       expect(result).toEqual({ status: 'Tenant created successfully' })
     })
   })

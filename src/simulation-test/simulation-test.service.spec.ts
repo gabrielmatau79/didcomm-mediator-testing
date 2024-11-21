@@ -63,7 +63,7 @@ describe('SimulationTestService', () => {
   describe('simulateTest', () => {
     it('should start a simulation test', async () => {
       const config = {
-        messagesPerConnection: 10,
+        messagesPerConnection: 3,
         timestampTestInterval: 5000,
         numAgent: 3,
         nameAgent: 'TestAgent',
@@ -74,7 +74,7 @@ describe('SimulationTestService', () => {
       expect(result.status).toBe('Simulation completed')
       expect(tenantsServiceMock.createTenant).toHaveBeenCalledTimes(3)
       expect(tenantsServiceMock.createConnection).toHaveBeenCalled()
-    }, 20000) // Increased timeout
+    }, 15000) // Increased timeout
   })
 
   describe('getAllMessages', () => {

@@ -51,9 +51,8 @@ describe('TenantsService', () => {
   describe('createTenant', () => {
     it('should create a tenant successfully', async () => {
       const tenantId = 'TestTenant'
-      const config = {}
 
-      const result = await service.createTenant(tenantId, config)
+      const result = await service.createTenant(tenantId)
 
       expect(agentFactoryMock.createAgent).toHaveBeenCalledWith(tenantId)
       expect(result).toEqual({ status: `Tenant ${tenantId} created successfully` })
@@ -63,7 +62,7 @@ describe('TenantsService', () => {
       const tenantId = 'ExistingTenant'
       service['tenants'][tenantId] = { agent: {} as any }
 
-      await expect(service.createTenant(tenantId, {})).rejects.toThrowError(`Tenant ${tenantId} already exists`)
+      await expect(service.createTenant(tenantId)).rejects.toThrowError(`Tenant ${tenantId} already exists`)
     })
   })
 
