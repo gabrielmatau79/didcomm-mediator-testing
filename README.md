@@ -26,12 +26,12 @@ This application is a NestJS-based messaging simulation system designed for test
 
 Below are the environment variables supported by the application. These can be set in a `.env` file in the project root.
 
-| Variable           | Default Value            | Description                                                                                    |
-| ------------------ | ------------------------ | ---------------------------------------------------------------------------------------------- |
-| `APP_PORT`         | `3001`                   | The port on which the application will run.                                                    |
-| `REDIS_URL`        | `redis://localhost:6379` | URL for the Redis instance used for message tracking.                                          |
-| `AGENT_PUBLIC_DID` | ``                       | Public DID for agent configuration.                                                            |
-| `LOG_LEVEL`        | `1`                      | Log verbosity level: <br> `1` = log, error <br> `2` = log, debug <br> `3` = log, debug, error. |
+| Variable           | Default Value            | Description                                                                    |
+| ------------------ | ------------------------ | ------------------------------------------------------------------------------ |
+| `APP_PORT`         | `3001`                   | The port on which the application will run.                                    |
+| `REDIS_URL`        | `redis://localhost:6379` | URL for the Redis instance used for message tracking.                          |
+| `AGENT_PUBLIC_DID` | ``                       | Public DID for agent configuration.                                            |
+| `LOG_LEVEL`        | `1`                      | Log verbosity level: `1` = log, error `2` = log, debu `3` = log, debug, error. |
 
 ## Getting Started
 
@@ -50,15 +50,15 @@ git clone https://github.com/gabrielmatau79/didcomm-mediator-testing.git
 cd didcomm-mediator-testing
 ```
 
-2. Install dependencies:
+1. Install dependencies:
 
 ```bash
 yarn install
 ```
 
-3. Start Redis (if not already running) or use docker compose file
+1. Start Redis (if not already running) or use docker compose file
 
-4. Run the application:
+1. Run the application:
 
 ```bash
 # development
@@ -71,7 +71,7 @@ $ yarn run start:dev
 $ yarn run start:prod
 ```
 
-5. Access Swagger UI:
+1. Access Swagger UI:
    Open [http://localhost:3001/doc](http://localhost:3001/doc) in your browser.
 
 ## Usage
@@ -82,14 +82,18 @@ $ yarn run start:prod
 
 - Access the API documentation at [http://localhost:3001/doc](http://localhost:3001/doc) in your browser.
 
-2. **Simulation**:
+1. **Simulation**:
 
 - Start a simulation with:
-  ```
+
+  ```api
   POST /simulation-test
   ```
+
   Example payload:
-  ```
+
+  ```api
+
   {
     "messagesPerConnection": 10,
     "timestampTestInterval": 60000,
@@ -98,18 +102,24 @@ $ yarn run start:prod
   }
   ```
 
-3. **Metrics**:
+1. **Metrics**:
 
 - Retrieve messages:
-  ```
+
+  ```api
   GET /simulation-test/messages
   ```
+
 - Retrieve metrics:
-  ```
+
+  ```api
   GET /simulation-test/metrics
   ```
+
 - Retrieve total metrics:
-  ```
+
+  ```api
+
   GET /simulation-test/metrics/totals
   ```
 
@@ -125,7 +135,12 @@ docker build -t didcomm-mediator-testing:test .
 
 ### Using Docker Compose
 
-To run the application with Docker Compose, execute:
+
+Create loadbalancing network if you don`t have:
+
+```bash
+docker network create loadbalancing
+```
 
 ```bash
 docker-compose up --build
@@ -135,7 +150,9 @@ This command will:
 
 - Build the application image.
 - Start the application and Redis services.
-- Expose the application on http://localhost:3001
+
+- Expose the application on <http://localhost:3001>
+
 
 ### Stopping the Services
 

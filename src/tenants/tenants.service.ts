@@ -140,6 +140,7 @@ export class TenantsService {
 
     try {
       await tenant.agent.wallet.delete()
+      await tenant.agent.shutdown()
       delete this.tenants[tenantId]
       this.logger.log(`[deleteTenant] Tenant ${tenantId} deleted successfully`)
       return { status: `Tenant ${tenantId} has been successfully deleted` }
@@ -180,7 +181,7 @@ export class TenantsService {
 
       // Use the `fromAgent` to accept the invitation
       const connectionRecord = await fromAgent.oob.receiveInvitationFromUrl(invitation, {
-        acceptInvitationTimeoutMs: 5000,
+        acceptInvitationTimeoutMs: 10000,
         autoAcceptConnection: true,
         autoAcceptInvitation: true,
       })

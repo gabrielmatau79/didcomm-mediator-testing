@@ -34,11 +34,17 @@ export class SimulationTestService {
     // Step 1: Generate agent IDs and create agents
     const agentIds = await this.createAgents(numAgent, nameAgent)
     this.logger.debug(`[simulateTest] Agents created: ${agentIds.join(', ')}`)
+    
+    await new Promise((resolve) => setTimeout(resolve, numAgent * 1000))
+
 
     try {
       // Step 2: Establish connections between all agents
       this.logger.debug('[simulateTest] Establishing connections...')
       await this.connectAllAgents(agentIds)
+
+      await new Promise((resolve) => setTimeout(resolve, numAgent * 1000))
+
 
       // Step 3: Send messages concurrently for the specified duration
       this.logger.debug('[simulateTest] Sending messages...')
@@ -53,16 +59,20 @@ export class SimulationTestService {
             this.logger.debug(`[simulateTest] Agent ${fromAgent} sending batch of messages...`)
             await Promise.all(
               Array.from({ length: messagesPerConnection }, async (_, i) => {
-                const toAgent = this.getRandomConnection(fromAgent, agentIds)
+
+                const toAgent = await this.getRandomConnection(fromAgent)
                 this.logger.log(`[simulateTest] Message #${i} ${_ ?? ''}`)
                 try {
-                  await this.tenantsService.sendMessage(
-                    fromAgent,
-                    toAgent,
-                    `Message #${++messageCount} from ${fromAgent} to ${toAgent}`,
-                  )
-                  await new Promise((resolve) => setTimeout(resolve, messageRate))
-                  this.logger.log(`[simulateTest] Message #${messageCount} sent from ${fromAgent} to ${toAgent}`)
+                  if (toAgent) {
+                    await this.tenantsService.sendMessage(
+                      fromAgent,
+                      toAgent,
+                      `Message #${++messageCount} from ${fromAgent} to ${toAgent}`,
+                    )
+                    await new Promise((resolve) => setTimeout(resolve, messageRate))
+                    this.logger.log(`[simulateTest] Message #${messageCount} sent from ${fromAgent} to ${toAgent}`)
+                  }
+
                 } catch (error) {
                   this.logger.error(
                     `[simulateTest] Failed to send message #${messageCount} from ${fromAgent} to ${toAgent}: ${error.message}`,
@@ -121,16 +131,40 @@ export class SimulationTestService {
    * @param agentIds - List of agent IDs.
    */
   async connectAllAgents(agentIds: string[]): Promise<void> {
-    this.logger.debug('[connectAllAgents] Connecting all agents...')
+    this.logger.debug('[connectAllAgents] Connecting all agents with retries...')
+
+    const connectionTasks: Promise<void>[] = []
+
     for (let i = 0; i < agentIds.length; i++) {
       for (let j = i + 1; j < agentIds.length; j++) {
-        try {
-          await this.tenantsService.createConnection(agentIds[i], agentIds[j])
-          this.logger.log(`[connectAllAgents] Connection established between ${agentIds[i]} and ${agentIds[j]}`)
-        } catch (error) {
-          this.logger.error(`[connectAllAgents] Failed to connect ${agentIds[i]} and ${agentIds[j]}: ${error.message}`)
-          throw new Error('[connectAllAgents] Connection setup failed')
+        const from = agentIds[i]
+        const to = agentIds[j]
+
+        const task = this.retryConnection(from, to, 3)
+        connectionTasks.push(task)
+      }
+    }
+
+    await Promise.all(connectionTasks)
+
+    this.logger.debug('[connectAllAgents] ✅ All connection tasks completed')
+  }
+
+  private async retryConnection(from: string, to: string, retries = 3): Promise<void> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        await this.tenantsService.createConnection(from, to)
+        this.logger.log(`[connectAllAgents] ✅ Connected ${from} <-> ${to} (attempt ${attempt})`)
+        return
+      } catch (error) {
+        this.logger.warn(`[connectAllAgents] ⚠️ Attempt ${attempt} failed for ${from} -> ${to}: ${error.message}`)
+        if (attempt === retries) {
+          this.logger.error(`[connectAllAgents] ❌ Failed to connect ${from} and ${to} after ${retries} attempts`)
+          throw new Error(`[connectAllAgents] Connection permanently failed between ${from} and ${to}`)
         }
+
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+
       }
     }
   }
@@ -145,15 +179,18 @@ export class SimulationTestService {
     const agentIds = Array.from({ length: numAgent }, (_, i) => `${nameAgent}-${i + 1}`)
     this.logger.debug(`[createAgents] Generated agent IDs: ${agentIds.join(', ')}`)
 
-    for (const agentId of agentIds) {
-      try {
-        await this.tenantsService.createTenant(agentId)
-        this.logger.log(`[createAgents] Agent created: ${agentId}`)
-      } catch (error) {
-        this.logger.error(`[createAgents] Failed to create agent ${agentId}: ${error.message}`)
-        throw new Error(`[createAgents] Agent creation failed: ${error.message}`)
-      }
-    }
+    await Promise.all(
+      agentIds.map(async (agentId) => {
+        try {
+          await this.tenantsService.createTenant(agentId)
+          this.logger.log(`[createAgents] ✅ Agent created: ${agentId}`)
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        } catch (error) {
+          this.logger.error(`[createAgents] ❌ Failed to create agent ${agentId}: ${error.message}`)
+          throw new Error(`[createAgents] Agent creation failed: ${error.message}`)
+        }
+      }),
+    )
 
     return agentIds
   }
@@ -178,9 +215,21 @@ export class SimulationTestService {
    * @param agentIds - List of agent IDs.
    * @returns Randomly selected target agent ID.
    */
-  private getRandomConnection(fromAgent: string, agentIds: string[]): string {
-    const connections = agentIds.filter((agent) => agent !== fromAgent)
-    return connections[Math.floor(Math.random() * connections.length)]
+
+  private async getRandomConnection(fromAgent: string): Promise<string | null> {
+    const connections = await this.tenantsService.getConnections(fromAgent)
+
+    const completedConnections = connections.filter((conn) => conn.state === 'completed' && conn.theirDid)
+
+    if (completedConnections.length === 0) {
+      this.logger.warn(`[getRandomConnection] No completed connections found for ${fromAgent}`)
+      return null
+    }
+
+    const randomIndex = Math.floor(Math.random() * completedConnections.length)
+    const randomConn = completedConnections[randomIndex]
+
+    return randomConn.theirLabel
   }
 
   /**
