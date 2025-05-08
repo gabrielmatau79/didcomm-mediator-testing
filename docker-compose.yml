@@ -1,0 +1,34 @@
+version: '3.9'
+
+services:
+  didcomm-mediator-testing:
+    build: .
+    image: didcomm-mediator-testing:test
+    container_name: didcomm-mediator-testing
+    ports:
+      - '3001:3001'
+    environment:
+      APP_PORT: 3001
+      REDIS_URL: redis://redis:6379
+      AGENT_PUBLIC_DID: did:web:ca.dev.2060.io
+      LOG_LEVEL: 2
+    depends_on:
+      - redis
+    networks:
+      - loadbalancing
+    volumes:
+      - .:/usr/src/app
+
+  redis:
+    container_name: redis
+    image: redis:alpine
+    restart: always
+    ports:
+      - 6379:6379
+    networks:
+      - loadbalancing
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+
+networks:
+  loadbalancing:
+    external: true
