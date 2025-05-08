@@ -93,6 +93,7 @@ $ yarn run start:prod
   Example payload:
 
   ```api
+
   {
     "messagesPerConnection": 10,
     "timestampTestInterval": 60000,
@@ -118,6 +119,7 @@ $ yarn run start:prod
 - Retrieve total metrics:
 
   ```api
+
   GET /simulation-test/metrics/totals
   ```
 
@@ -133,13 +135,12 @@ docker build -t didcomm-mediator-testing:test .
 
 ### Using Docker Compose
 
+
 Create loadbalancing network if you don`t have:
 
 ```bash
 docker network create loadbalancing
 ```
-
-To run the application with Docker Compose, execute:
 
 ```bash
 docker-compose up --build
@@ -149,7 +150,9 @@ This command will:
 
 - Build the application image.
 - Start the application and Redis services.
+
 - Expose the application on <http://localhost:3001>
+
 
 ### Stopping the Services
 

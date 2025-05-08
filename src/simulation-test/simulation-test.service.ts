@@ -34,7 +34,9 @@ export class SimulationTestService {
     // Step 1: Generate agent IDs and create agents
     const agentIds = await this.createAgents(numAgent, nameAgent)
     this.logger.debug(`[simulateTest] Agents created: ${agentIds.join(', ')}`)
+    
     await new Promise((resolve) => setTimeout(resolve, numAgent * 1000))
+
 
     try {
       // Step 2: Establish connections between all agents
@@ -42,6 +44,7 @@ export class SimulationTestService {
       await this.connectAllAgents(agentIds)
 
       await new Promise((resolve) => setTimeout(resolve, numAgent * 1000))
+
 
       // Step 3: Send messages concurrently for the specified duration
       this.logger.debug('[simulateTest] Sending messages...')
@@ -56,6 +59,7 @@ export class SimulationTestService {
             this.logger.debug(`[simulateTest] Agent ${fromAgent} sending batch of messages...`)
             await Promise.all(
               Array.from({ length: messagesPerConnection }, async (_, i) => {
+
                 const toAgent = await this.getRandomConnection(fromAgent)
                 this.logger.log(`[simulateTest] Message #${i} ${_ ?? ''}`)
                 try {
@@ -68,6 +72,7 @@ export class SimulationTestService {
                     await new Promise((resolve) => setTimeout(resolve, messageRate))
                     this.logger.log(`[simulateTest] Message #${messageCount} sent from ${fromAgent} to ${toAgent}`)
                   }
+
                 } catch (error) {
                   this.logger.error(
                     `[simulateTest] Failed to send message #${messageCount} from ${fromAgent} to ${toAgent}: ${error.message}`,
@@ -159,6 +164,7 @@ export class SimulationTestService {
         }
 
         await new Promise((resolve) => setTimeout(resolve, 2000))
+
       }
     }
   }
@@ -209,6 +215,7 @@ export class SimulationTestService {
    * @param agentIds - List of agent IDs.
    * @returns Randomly selected target agent ID.
    */
+
   private async getRandomConnection(fromAgent: string): Promise<string | null> {
     const connections = await this.tenantsService.getConnections(fromAgent)
 
