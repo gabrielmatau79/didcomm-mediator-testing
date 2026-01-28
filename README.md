@@ -39,6 +39,7 @@ Below are the environment variables supported by the application. These can be s
 | `MAX_CONCURRENT_AGENT_CREATION` | `2`                      | Maximum number of agents created concurrently during simulations.              |
 | `REPORTS_DIR`                   | `./reports`              | Directory where report files are stored.                                       |
 
+
 ## Getting Started
 
 ### Prerequisites
