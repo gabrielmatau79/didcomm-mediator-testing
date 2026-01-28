@@ -3,15 +3,25 @@ import { TenantsService } from '../tenants/tenants.service'
 import Redis from 'ioredis'
 import { InjectRedis } from '@nestjs-modules/ioredis'
 import { SimulateTestDto } from './dto/simulate-test.dto'
+import { ConfigService } from '@nestjs/config'
+import { v4 as uuidv4 } from 'uuid'
+import pLimit = require('p-limit')
+import * as fs from 'fs'
+import * as path from 'path'
 
 @Injectable()
 export class SimulationTestService {
   private readonly logger = new Logger(SimulationTestService.name)
+  private readonly reportsDir: string
+  private readonly activeRuns = new Map<string, { stopRequested: boolean }>()
 
   constructor(
     private readonly tenantsService: TenantsService,
     @InjectRedis() private readonly redisClient: Redis,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.reportsDir = this.configService.get<string>('appConfig.reportsDir') || path.join(process.cwd(), 'reports')
+  }
 
   /**
    * Simulates a test involving multiple agents, connections, and message exchanges.
@@ -20,7 +30,9 @@ export class SimulationTestService {
    * @param numAgent - Number of agents to create.
    * @param nameAgent - Base name for the agents.
    * @param messageRate - Optional rate at which messages are sent (in milliseconds).
-   * @returns Status of the simulation.
+   * @param testName - Name of the test.
+   * @param testDescription - Optional description of the test.
+   * @returns Status of the simulation and the test ID.
    */
   async simulateTest({
     messagesPerConnection,
@@ -28,65 +40,132 @@ export class SimulationTestService {
     numAgent,
     nameAgent,
     messageRate = 100,
-  }: SimulateTestDto): Promise<{ status: string }> {
+    testName,
+    testDescription,
+  }: SimulateTestDto): Promise<{ status: string; testId: string }> {
     this.logger.debug('[simulateTest] Starting simulation test...')
 
-    // Step 1: Generate agent IDs and create agents
-    const agentIds = await this.createAgents(numAgent, nameAgent)
-    this.logger.debug(`[simulateTest] Agents created: ${agentIds.join(', ')}`)
-    await new Promise((resolve) => setTimeout(resolve, numAgent * 1000))
+    const testId = uuidv4()
+    const stopSignal = { stopRequested: false }
+    this.activeRuns.set(testId, stopSignal)
+    const startDate = new Date()
+    const estimatedEndDate = new Date(startDate.getTime() + timestampTestInterval)
 
+    const testRecord = {
+      testId,
+      testName,
+      testDescription,
+      parameters: {
+        messagesPerConnection,
+        timestampTestInterval,
+        numAgent,
+        nameAgent,
+        messageRate,
+      },
+      startDate: startDate.toISOString(),
+      estimatedEndDate: estimatedEndDate.toISOString(),
+      status: 'running',
+    }
+
+    await this.redisClient.set(`test:${testId}`, JSON.stringify(testRecord))
+
+    this.runSimulation(
+      testId,
+      {
+        messagesPerConnection,
+        timestampTestInterval,
+        numAgent,
+        nameAgent,
+        messageRate,
+        testName,
+        testDescription,
+      },
+      stopSignal,
+    ).catch(async (error) => {
+      this.logger.error(`[simulateTest] Simulation test failed: ${error.message}`)
+      await this.updateTestRecord(testId, { status: 'failed', error: error.message })
+      this.activeRuns.delete(testId)
+    })
+
+    return { status: 'Simulation test is running', testId }
+  }
+
+  private async runSimulation(
+    testId: string,
+    config: SimulateTestDto,
+    stopSignal: { stopRequested: boolean },
+  ): Promise<void> {
+    const { messagesPerConnection, timestampTestInterval, numAgent, nameAgent, messageRate = 100 } = config
+
+    const startTime = Date.now()
+    const endTime = startTime + timestampTestInterval
+    const maxConcurrentMessages = this.configService.get<number>('appConfig.maxConcurrentMessages') || 5
+
+    let agentIds: string[] = []
     try {
+      // Step 1: Generate agent IDs and create agents
+      agentIds = await this.createAgents(numAgent, nameAgent)
+      this.logger.debug(`[simulateTest] Agents created: ${agentIds.join(', ')}`)
+      await new Promise((resolve) => setTimeout(resolve, numAgent * 1000))
+
+      if (stopSignal.stopRequested) {
+        await this.updateTestRecord(testId, {
+          status: 'stopped',
+          endDate: new Date().toISOString(),
+        })
+        return
+      }
+
       // Step 2: Establish connections between all agents
       this.logger.debug('[simulateTest] Establishing connections...')
       await this.connectAllAgents(agentIds)
 
       await new Promise((resolve) => setTimeout(resolve, numAgent * 1000))
 
+      if (stopSignal.stopRequested) {
+        await this.updateTestRecord(testId, {
+          status: 'stopped',
+          endDate: new Date().toISOString(),
+        })
+        return
+      }
+
       // Step 3: Send messages concurrently for the specified duration
       this.logger.debug('[simulateTest] Sending messages...')
-      const startTime = Date.now()
-      const endTime = startTime + timestampTestInterval
-
       await Promise.all(
-        agentIds.map(async (fromAgent) => {
-          let messageCount = 0
-
-          while (Date.now() < endTime) {
-            this.logger.debug(`[simulateTest] Agent ${fromAgent} sending batch of messages...`)
-            await Promise.all(
-              Array.from({ length: messagesPerConnection }, async (_, i) => {
-                const toAgent = await this.getRandomConnection(fromAgent)
-                this.logger.log(`[simulateTest] Message #${i} ${_ ?? ''}`)
-                try {
-                  if (toAgent) {
-                    await this.tenantsService.sendMessage(
-                      fromAgent,
-                      toAgent,
-                      `Message #${++messageCount} from ${fromAgent} to ${toAgent}`,
-                    )
-                    await new Promise((resolve) => setTimeout(resolve, messageRate))
-                    this.logger.log(`[simulateTest] Message #${messageCount} sent from ${fromAgent} to ${toAgent}`)
-                  }
-                } catch (error) {
-                  this.logger.error(
-                    `[simulateTest] Failed to send message #${messageCount} from ${fromAgent} to ${toAgent}: ${error.message}`,
-                  )
-                }
-                await new Promise((resolve) => setTimeout(resolve, messageRate))
-              }),
-            )
-          }
-        }),
+        agentIds.map((fromAgent) =>
+          this.runMessageInterval({
+            testId,
+            fromAgent,
+            messagesPerConnection,
+            messageRate,
+            endTime,
+            maxConcurrentMessages,
+            stopSignal,
+          }),
+        ),
       )
 
-      return { status: 'Simulation completed' }
+      await this.updateTestRecord(testId, {
+        status: stopSignal.stopRequested ? 'stopped' : 'completed',
+        endDate: new Date().toISOString(),
+      })
     } catch (error) {
       this.logger.error(`[simulateTest] Simulation test failed: ${error.message}`)
-      throw new Error('[simulateTest] Simulation test failed')
+      await this.updateTestRecord(testId, {
+        status: 'failed',
+        error: error.message,
+        endDate: new Date().toISOString(),
+      })
     } finally {
-      this.logger.debug('[simulateTest] Await 1 minute agents to end...')
-      // Step 4: Clean up and delete agents
+      this.activeRuns.delete(testId)
+      const cleanupDelayMs = this.configService.get<number>('appConfig.agentCleanupDelayMs') || 0
+      this.logger.debug(`cleanupDelayMs: ${cleanupDelayMs}`)
+      if (cleanupDelayMs > 0) {
+        this.logger.debug(`[simulateTest] Waiting ${cleanupDelayMs}ms before cleanup...`)
+        await new Promise((resolve) => setTimeout(resolve, cleanupDelayMs))
+      }
+
       this.logger.debug('[simulateTest] Cleaning up agents...')
       for (const agentId of agentIds) {
         try {
@@ -99,25 +178,107 @@ export class SimulationTestService {
     }
   }
 
+  private async runMessageInterval({
+    testId,
+    fromAgent,
+    messagesPerConnection,
+    messageRate,
+    endTime,
+    maxConcurrentMessages,
+    stopSignal,
+  }: {
+    testId: string
+    fromAgent: string
+    messagesPerConnection: number
+    messageRate: number
+    endTime: number
+    maxConcurrentMessages: number
+    stopSignal: { stopRequested: boolean }
+  }): Promise<void> {
+    const limit = pLimit(Math.max(maxConcurrentMessages, 1))
+    const activeTasks = new Set<Promise<void>>()
+    let messageCount = 0
+
+    return new Promise((resolve) => {
+      const queueBatch = () => {
+        if (stopSignal.stopRequested || Date.now() >= endTime) {
+          return false
+        }
+
+        this.logger.debug(`[simulateTest] Agent ${fromAgent} sending batch of messages...`)
+
+        for (let i = 0; i < messagesPerConnection; i++) {
+          if (stopSignal.stopRequested) {
+            break
+          }
+          const task = limit(async () => {
+            if (stopSignal.stopRequested) {
+              return
+            }
+            const toAgent = await this.getRandomConnection(fromAgent)
+            if (!toAgent) {
+              return
+            }
+
+            const currentMessageCount = ++messageCount
+
+            try {
+              await this.tenantsService.sendMessage(
+                fromAgent,
+                toAgent,
+                `Message #${currentMessageCount} from ${fromAgent} to ${toAgent}`,
+                testId,
+              )
+              this.logger.log(
+                `[simulateTest] Message #${currentMessageCount} sent from ${fromAgent} to ${toAgent} (testId: ${testId})`,
+              )
+            } catch (error) {
+              this.logger.error(
+                `[simulateTest] Failed to send message #${currentMessageCount} from ${fromAgent} to ${toAgent}: ${error.message}`,
+              )
+            }
+          })
+
+          activeTasks.add(task)
+          task.finally(() => activeTasks.delete(task))
+        }
+        return true
+      }
+
+      const hasQueued = queueBatch()
+
+      if (!hasQueued) {
+        Promise.allSettled(Array.from(activeTasks)).then(() => resolve())
+        return
+      }
+
+      const intervalId = setInterval(() => {
+        if (!queueBatch()) {
+          clearInterval(intervalId)
+          Promise.allSettled(Array.from(activeTasks)).then(() => resolve())
+        }
+      }, messageRate)
+    })
+  }
+
   /**
-   * Retrieves all messages stored in Redis.
+   * Retrieves messages stored in Redis for a specific test.
    * @returns A list of messages with details.
    */
-  async getAllMessages(): Promise<any[]> {
-    this.logger.debug('[getAllMessages] Fetching all messages from Redis...')
+  async getMessagesByTestId(testId: string): Promise<any[]> {
+    this.logger.debug(`[getMessagesByTestId] Fetching messages for test ${testId} from Redis...`)
+    const messages: any[] = []
+
     try {
-      const keys = await this.redisClient.keys('message:*')
-      const messages = await Promise.all(
-        keys.map(async (key) => {
-          const message = await this.redisClient.get(key)
-          return message ? JSON.parse(message) : null
-        }),
-      )
-      this.logger.log(`[getAllMessages] Fetched ${messages.length} messages.`)
-      return messages.filter((message) => message !== null)
+      await this.scanJsonRecords(`message:${testId}:*`, (message) => {
+        messages.push(message)
+      })
+
+      this.logger.log(`[getMessagesByTestId] Fetched ${messages.length} messages for test ${testId}.`)
+      return messages
     } catch (error) {
-      this.logger.error(`[getAllMessages] Error fetching messages: ${error.message}`)
-      throw new Error('[getAllMessages] Failed to retrieve messages')
+      this.logger.error(`[getMessagesByTestId] Error fetching messages: ${error.message}`)
+      throw new Error('[getMessagesByTestId] Failed to retrieve messages')
     }
   }
 
@@ -173,17 +334,22 @@ export class SimulationTestService {
     const agentIds = Array.from({ length: numAgent }, (_, i) => `${nameAgent}-${i + 1}`)
     this.logger.debug(`[createAgents] Generated agent IDs: ${agentIds.join(', ')}`)
 
+    const maxConcurrentAgentCreation = this.configService.get<number>('appConfig.maxConcurrentAgentCreation') || 2
+    const limit = pLimit(Math.max(maxConcurrentAgentCreation, 1))
+
     await Promise.all(
-      agentIds.map(async (agentId) => {
-        try {
-          await this.tenantsService.createTenant(agentId)
-          this.logger.log(`[createAgents] ✅ Agent created: ${agentId}`)
-          await new Promise((resolve) => setTimeout(resolve, 1000))
-        } catch (error) {
-          this.logger.error(`[createAgents] ❌ Failed to create agent ${agentId}: ${error.message}`)
-          throw new Error(`[createAgents] Agent creation failed: ${error.message}`)
-        }
-      }),
+      agentIds.map((agentId) =>
+        limit(async () => {
+          try {
+            await this.tenantsService.createTenant(agentId)
+            this.logger.log(`[createAgents] ✅ Agent created: ${agentId}`)
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+          } catch (error) {
+            this.logger.error(`[createAgents] ❌ Failed to create agent ${agentId}: ${error.message}`)
+            throw new Error(`[createAgents] Agent creation failed: ${error.message}`)
+          }
+        }),
+      ),
     )
 
     return agentIds
@@ -226,53 +392,28 @@ export class SimulationTestService {
   }
 
   /**
-   * Calculates total metrics for all agents based on messages stored in Redis.
-   * @returns Total metrics including total messages and average processing time per agent.
+   * Calculates total metrics for a test using aggregated stats.
+   * @returns Total metrics including total messages and average processing time.
    * @throws Error if metrics calculation fails.
    */
-  async calculateTotals(): Promise<any> {
-    this.logger.debug('Calculating total metrics from Redis...')
-    try {
-      // Fetch all message keys from Redis
-      const keys = await this.redisClient.keys('message:*')
+  async calculateTotals(testId: string): Promise<any> {
+    this.logger.debug(`[calculateTotals] Calculating total metrics for test ${testId} from Redis...`)
 
-      if (keys.length === 0) {
-        this.logger.warn('No messages found in Redis for total metrics calculation.')
+    try {
+      const statsKey = `test:${testId}:stats`
+      const stats = await this.redisClient.hgetall(statsKey)
+
+      if (!stats || Object.keys(stats).length === 0) {
+        this.logger.warn(`[calculateTotals] No stats found in Redis for test ${testId}.`)
         return {}
       }
 
-      const totals: Record<string, { totalMessages: number; averageProcessingTimeMs: number }> = {}
+      const totalMessages = Number(stats.totalMessages || 0)
+      const totalProcessingTimeMs = Number(stats.totalProcessingTimeMs || 0)
+      const averageProcessingTimeMs = totalMessages > 0 ? Math.round(totalProcessingTimeMs / totalMessages) : 0
 
-      // Process each message key to calculate totals
-      for (const key of keys) {
-        const messageData = await this.redisClient.get(key)
-        if (messageData) {
-          const message = JSON.parse(messageData)
-          const { fromTenantId, processingTimeMs } = message
-
-          // Initialize totals for the agent if it doesn't exist
-          if (!totals[fromTenantId]) {
-            totals[fromTenantId] = { totalMessages: 0, averageProcessingTimeMs: 0 }
-          }
-
-          // Update total messages and aggregate processing time
-          totals[fromTenantId].totalMessages++
-          if (processingTimeMs) {
-            totals[fromTenantId].averageProcessingTimeMs += processingTimeMs
-          }
-        }
-      }
-
-      // Calculate average processing time for each agent
-      for (const agentId of Object.keys(totals)) {
-        const { totalMessages, averageProcessingTimeMs } = totals[agentId]
-        if (totalMessages > 0) {
-          totals[agentId].averageProcessingTimeMs = Math.round(averageProcessingTimeMs / totalMessages)
-        }
-      }
-
-      this.logger.log('Total metrics successfully calculated.')
-      return totals
+      this.logger.log(`[calculateTotals] Total metrics successfully calculated for test ${testId}.`)
+      return { totalMessages, averageProcessingTimeMs }
     } catch (error) {
       this.logger.error(`Error calculating total metrics: ${error.message}`)
       throw new Error('Failed to calculate total metrics from Redis.')
@@ -284,46 +425,219 @@ export class SimulationTestService {
    * @returns Metrics grouped by agents, including message details and processing times.
    * @throws Error if metrics calculation fails.
    */
-  async calculateMetricsByAgent(): Promise<any> {
-    this.logger.debug('Calculating metrics grouped by agent from Redis...')
+  async calculateMetricsByAgent(testId: string): Promise<any> {
+    this.logger.debug(`[calculateMetricsByAgent] Calculating metrics for test ${testId} grouped by agent...`)
+
     try {
-      // Fetch all message keys stored in Redis
-      const keys = await this.redisClient.keys('message:*')
-
-      if (keys.length === 0) {
-        this.logger.warn('No messages found in Redis for metrics calculation.')
-        return []
-      }
-
       const metricsByAgent: Record<string, { toTenantId: string; message: string; processingTimeMs: number | null }[]> =
         {}
 
-      // Process each message key to build metrics
-      for (const key of keys) {
-        const messageData = await this.redisClient.get(key)
-        if (messageData) {
-          const message = JSON.parse(messageData)
-          const { fromTenantId, toTenantId, message: content, processingTimeMs } = message
+      await this.scanJsonRecords(`message:${testId}:*`, (message) => {
+        const { fromTenantId, toTenantId, message: content, processingTimeMs } = message
 
-          // Initialize the agent's metrics group if it doesn't exist
-          if (!metricsByAgent[fromTenantId]) {
-            metricsByAgent[fromTenantId] = []
-          }
-
-          // Add the message details to the agent's metrics group
-          metricsByAgent[fromTenantId].push({
-            toTenantId,
-            message: content,
-            processingTimeMs: processingTimeMs || null,
-          })
+        if (!metricsByAgent[fromTenantId]) {
+          metricsByAgent[fromTenantId] = []
         }
-      }
 
-      this.logger.log('Metrics grouped by agent successfully calculated.')
+        metricsByAgent[fromTenantId].push({
+          toTenantId,
+          message: content,
+          processingTimeMs: processingTimeMs || null,
+        })
+      })
+
+      this.logger.log(`[calculateMetricsByAgent] Metrics grouped by agent successfully calculated for ${testId}.`)
       return metricsByAgent
     } catch (error) {
       this.logger.error(`Error calculating grouped metrics: ${error.message}`)
       throw new Error('Failed to calculate grouped metrics from Redis.')
     }
+  }
+
+  async generateReport(testId: string): Promise<{ reportPath: string; report: any }> {
+    this.logger.debug(`[generateReport] Generating report for test ${testId}...`)
+    const testRecordData = await this.redisClient.get(`test:${testId}`)
+
+    if (!testRecordData) {
+      throw new Error(`[generateReport] Test ${testId} not found`)
+    }
+
+    const testRecord = JSON.parse(testRecordData)
+    const metricsByAgent = await this.calculateMetricsByAgent(testId)
+    const totals = await this.calculateTotals(testId)
+
+    const report = {
+      ...testRecord,
+      metricsByAgent,
+      totals,
+    }
+
+    await fs.promises.mkdir(this.reportsDir, { recursive: true })
+    const reportPath = path.join(this.reportsDir, `report-${testId}.json`)
+    await fs.promises.writeFile(reportPath, JSON.stringify(report, null, 2))
+
+    this.logger.log(`[generateReport] Report generated at ${reportPath}`)
+    return { reportPath, report }
+  }
+
+  async generateConsolidatedReport(testId: string): Promise<{ reportPath: string; report: any }> {
+    this.logger.debug(`[generateConsolidatedReport] Generating consolidated report for test ${testId}...`)
+    const testRecordData = await this.redisClient.get(`test:${testId}`)
+
+    if (!testRecordData) {
+      throw new Error(`[generateConsolidatedReport] Test ${testId} not found`)
+    }
+
+    const testRecord = JSON.parse(testRecordData)
+    const totals = await this.calculateTotals(testId)
+    const messages = await this.getMessagesByTestId(testId)
+
+    const report = {
+      ...testRecord,
+      totals,
+      messages,
+    }
+
+    await fs.promises.mkdir(this.reportsDir, { recursive: true })
+    const reportPath = path.join(this.reportsDir, `report-${testId}-consolidated.json`)
+    await fs.promises.writeFile(reportPath, JSON.stringify(report, null, 2))
+
+    this.logger.log(`[generateConsolidatedReport] Consolidated report generated at ${reportPath}`)
+    return { reportPath, report }
+  }
+
+  async getTests(): Promise<any[]> {
+    this.logger.debug('[getTests] Fetching tests from Redis...')
+    const tests: any[] = []
+
+    try {
+      await this.scanJsonRecords(
+        'test:*',
+        (record) => {
+          tests.push(record)
+        },
+        {
+          keyFilter: (key) => !key.endsWith(':stats'),
+        },
+      )
+
+      this.logger.log(`[getTests] Fetched ${tests.length} tests.`)
+      return tests
+    } catch (error) {
+      this.logger.error(`[getTests] Error fetching tests: ${error.message}`)
+      throw new Error('[getTests] Failed to retrieve tests')
+    }
+  }
+
+  async activateTenantsForTest(
+    testId: string,
+    cleanupDelayMs?: number,
+  ): Promise<{ status: string; tenantIds: string[]; cleanupDelayMs: number }> {
+    const testRecordData = await this.redisClient.get(`test:${testId}`)
+    if (!testRecordData) {
+      throw new Error(`[activateTenantsForTest] Test ${testId} not found`)
+    }
+
+    const testRecord = JSON.parse(testRecordData)
+    const { numAgent, nameAgent } = testRecord.parameters || {}
+
+    if (!numAgent || !nameAgent) {
+      throw new Error(`[activateTenantsForTest] Test ${testId} missing parameters`)
+    }
+
+    const tenantIds = await this.createAgents(numAgent, nameAgent)
+
+    const delay =
+      typeof cleanupDelayMs === 'number'
+        ? cleanupDelayMs
+        : this.configService.get<number>('appConfig.agentCleanupDelayMs') || 0
+
+    if (delay > 0) {
+      this.logger.debug(`[activateTenantsForTest] Scheduling cleanup in ${delay}ms for test ${testId}`)
+      setTimeout(() => {
+        tenantIds.forEach((tenantId) => {
+          this.tenantsService
+            .deleteTenant(tenantId)
+            .then(() => this.logger.log(`[activateTenantsForTest] Agent deleted: ${tenantId}`))
+            .catch((error) =>
+              this.logger.error(`[activateTenantsForTest] Failed to delete agent ${tenantId}: ${error.message}`),
+            )
+        })
+      }, delay)
+    }
+
+    return { status: 'Tenants activated', tenantIds, cleanupDelayMs: delay }
+  }
+
+  async stopSimulation(testId: string): Promise<{ status: string; testId: string }> {
+    const run = this.activeRuns.get(testId)
+
+    if (!run) {
+      return { status: 'No active simulation for testId', testId }
+    }
+
+    run.stopRequested = true
+    await this.updateTestRecord(testId, { status: 'stopping' })
+    return { status: 'Stop requested', testId }
+  }
+
+  private async scanJsonRecords(
+    pattern: string,
+    onRecord: (record: any) => void,
+    options?: { keyFilter?: (key: string) => boolean },
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const stream = this.redisClient.scanStream({ match: pattern, count: 1000 })
+
+      stream.on('data', (keys: string[]) => {
+        const filteredKeys = options?.keyFilter ? keys.filter(options.keyFilter) : keys
+        if (!filteredKeys.length) {
+          return
+        }
+
+        stream.pause()
+        const pipeline = this.redisClient.pipeline()
+        filteredKeys.forEach((key) => pipeline.get(key))
+
+        pipeline
+          .exec()
+          .then((results) => {
+            if (!results) {
+              return
+            }
+
+            results.forEach((result) => {
+              const [error, value] = result
+              if (error || !value) {
+                return
+              }
+
+              try {
+                onRecord(JSON.parse(value as string))
+              } catch (parseError) {
+                this.logger.warn(`[scanJsonRecords] Failed to parse record for key pattern ${pattern}`)
+              }
+            })
+          })
+          .then(() => stream.resume())
+          .catch((error) => {
+            stream.destroy(error)
+            reject(error)
+          })
+      })
+
+      stream.on('end', () => resolve())
+      stream.on('error', (error) => reject(error))
+    })
+  }
+
+  private async updateTestRecord(testId: string, updates: Record<string, any>): Promise<void> {
+    const existing = await this.redisClient.get(`test:${testId}`)
+    if (!existing) {
+      return
+    }
+
+    const record = JSON.parse(existing)
+    await this.redisClient.set(`test:${testId}`, JSON.stringify({ ...record, ...updates }))
   }
 }
