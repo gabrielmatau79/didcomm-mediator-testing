@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common'
 import { Agent, WsOutboundTransport, AgentEventTypes, ConsoleLogger, LogLevel } from '@credo-ts/core'
 import { AskarModule } from '@credo-ts/askar'
 import { agentDependencies } from '@credo-ts/node'
-import { ariesAskar } from '@hyperledger/aries-askar-nodejs'
+import { askar } from '@openwallet-foundation/askar-nodejs'
+
 import { ConnectionsModule, MediationRecipientModule, MediatorPickupStrategy } from '@credo-ts/core'
 import { AgentMessageSentEvent, AgentMessageProcessedEvent } from '@credo-ts/core'
 import { InjectRedis } from '@nestjs-modules/ioredis'
@@ -14,21 +15,31 @@ import { ConfigService } from '@nestjs/config'
 export class AgentFactory {
   private logDir = `${process.cwd()}/logs_test`
   private logger: ConsoleLogger
+  private readonly enableAgentLogs: boolean
 
   constructor(
     @InjectRedis() private readonly redisClient: Redis,
     private configService: ConfigService,
   ) {
     this.logger = new ConsoleLogger(LogLevel.debug)
-    fs.mkdirSync(this.logDir, { recursive: true })
+    this.enableAgentLogs = this.configService.get<boolean>('appConfig.enableAgentLogs') ?? true
+    if (this.enableAgentLogs) {
+      fs.mkdirSync(this.logDir, { recursive: true })
+    }
   }
 
   async createAgent(tenantId: string): Promise<Agent<any>> {
-    const logFilePath = `${this.logDir}/agent_log_${tenantId}.txt`
-    const logStream = fs.createWriteStream(logFilePath, { flags: 'w' })
+    const logStream = this.enableAgentLogs
+      ? fs.createWriteStream(`${this.logDir}/agent_log_${tenantId}.txt`, { flags: 'w' })
+      : null
+    const logWrite = (message: string) => {
+      if (logStream) {
+        logStream.write(message.endsWith('\n') ? message : `${message}\n`)
+      }
+    }
 
     this.logger.info(`Creating agent for tenant: ${tenantId}`)
-    logStream.write(`Creating agent for tenant: ${tenantId}\n`)
+    logWrite(`Creating agent for tenant: ${tenantId}`)
 
     const agentConfig = {
       label: tenantId,
@@ -41,7 +52,7 @@ export class AgentFactory {
         config: agentConfig,
         dependencies: agentDependencies,
         modules: {
-          askar: new AskarModule({ ariesAskar }),
+          askar: new AskarModule({ ariesAskar: askar }),
           mediationRecipient: new MediationRecipientModule({
             mediatorPickupStrategy: MediatorPickupStrategy.PickUpV2LiveMode,
           }),
@@ -53,39 +64,42 @@ export class AgentFactory {
       await agent.initialize()
 
       this.logger.info(`Agent for tenant ${tenantId} initialized successfully`)
-      logStream.write(`Agent for tenant ${tenantId} initialized successfully\n`)
+      logWrite(`Agent for tenant ${tenantId} initialized successfully`)
 
       if (!(await agent.mediationRecipient.findDefaultMediator())) {
         this.logger.debug(`No default mediator found for tenant: ${tenantId}`)
-        logStream.write(`No default mediator found for tenant: ${tenantId}`)
-        await this.setupMediation(agent, tenantId, logStream)
+        logWrite(`No default mediator found for tenant: ${tenantId}`)
+        await this.setupMediation(agent, tenantId, logWrite)
       } else {
         this.logger.debug(`Mediation already set up for tenant: ${tenantId}`)
-        logStream.write(`Mediation already set up for tenant: ${tenantId}\n`)
+        logWrite(`Mediation already set up for tenant: ${tenantId}`)
       }
-      agent.wallet.delete
-      this.registerAgentEvents(agent, tenantId, logStream)
+      this.registerAgentEvents(agent, tenantId, logWrite)
 
       return agent
     } catch (error) {
       this.logger.error(`Error initializing agent for tenant ${tenantId}: ${error.message}`)
-      logStream.write(`Error initializing agent for tenant ${tenantId}: ${error.stack}\n`)
+      logWrite(`Error initializing agent for tenant ${tenantId}: ${error.stack}`)
       throw error
     }
   }
 
-  private async setupMediation(agent: Agent<any>, tenantId: string, logStream: fs.WriteStream): Promise<void> {
+  private async setupMediation(
+    agent: Agent<any>,
+    tenantId: string,
+    logWrite: (message: string) => void,
+  ): Promise<void> {
     const publicDid = this.configService.get('appConfig.publicDid')
 
     if (!publicDid) {
       const error = new Error('Mediator DID URL is not configured')
       this.logger.error(error.message)
-      logStream.write(`Error: ${error.message}\n`)
+      logWrite(`Error: ${error.message}`)
       throw error
     }
 
     this.logger.debug(`Setting up mediation for tenant: ${tenantId}`)
-    logStream.write(`Setting up mediation for tenant: ${tenantId}\n`)
+    logWrite(`Setting up mediation for tenant: ${tenantId}`)
 
     try {
       const { connectionRecord } = await agent.oob.receiveImplicitInvitation({
@@ -103,32 +117,32 @@ export class AgentFactory {
       })
 
       this.logger.debug(`Mediator connection established: ${JSON.stringify(mediatorConnection)}`)
-      logStream.write(`Mediator connection established: ${JSON.stringify(mediatorConnection)}\n`)
+      logWrite(`Mediator connection established: ${JSON.stringify(mediatorConnection)}`)
 
       const mediationRecord = await agent.mediationRecipient.requestAndAwaitGrant(mediatorConnection)
       this.logger.debug('Mediation granted. Initializing mediator recipient module.')
-      logStream.write('Mediation granted. Initializing mediator recipient module.\n')
+      logWrite('Mediation granted. Initializing mediator recipient module.')
 
       await agent.mediationRecipient.setDefaultMediator(mediationRecord)
       await agent.mediationRecipient.initialize()
 
       this.logger.info(`Tenant ${tenantId} mediation established with DID: ${publicDid}`)
-      logStream.write(`Tenant ${tenantId} mediation established with DID: ${publicDid}\n`)
+      logWrite(`Tenant ${tenantId} mediation established with DID: ${publicDid}`)
     } catch (error) {
       this.logger.error(`Error during mediation setup for tenant ${tenantId}: ${error.message}`)
-      logStream.write(`Error during mediation setup for tenant ${tenantId}: ${error.stack}\n`)
+      logWrite(`Error during mediation setup for tenant ${tenantId}: ${error.stack}`)
       throw error
     }
   }
 
-  private registerAgentEvents(agent: Agent<any>, tenantId: string, logStream: fs.WriteStream): void {
+  private registerAgentEvents(agent: Agent<any>, tenantId: string, logWrite: (message: string) => void): void {
     this.logger.debug(`Registering events for tenant: ${tenantId}`)
-    logStream.write(`Registering events for tenant: ${tenantId}\n`)
+    logWrite(`Registering events for tenant: ${tenantId}`)
 
     agent.events.on(AgentEventTypes.AgentMessageSent, (data: AgentMessageSentEvent) => {
       const threadId = data.payload.message.message.threadId
       this.logger.debug(`[AgentMessageSent] Tenant: ${tenantId}, ThreadId: ${threadId}`)
-      logStream.write(`[AgentMessageSent] Tenant: ${tenantId}, ThreadId: ${threadId}\n`)
+      logWrite(`[AgentMessageSent] Tenant: ${tenantId}, ThreadId: ${threadId}`)
     })
 
     agent.events.on(AgentEventTypes.AgentMessageProcessed, async (data: AgentMessageProcessedEvent) => {
@@ -136,11 +150,11 @@ export class AgentFactory {
       const processedTimestamp = new Date().toISOString()
 
       this.logger.debug(`[AgentMessageProcessed] Tenant: ${tenantId}, ThreadId: ${threadId}`)
-      logStream.write(`[AgentMessageProcessed] Tenant: ${tenantId}, ThreadId: ${threadId}\n`)
+      logWrite(`[AgentMessageProcessed] Tenant: ${tenantId}, ThreadId: ${threadId}`)
 
       try {
-        // Retrieve message record from Redis
-        const messageKey = `message:${threadId}`
+        const testId = await this.redisClient.get(`message-index:${threadId}`)
+        const messageKey = testId ? `message:${testId}:${threadId}` : `message:${threadId}`
         const messageData = await this.redisClient.get(messageKey)
 
         if (messageData) {
@@ -156,19 +170,25 @@ export class AgentFactory {
 
           await this.redisClient.set(messageKey, JSON.stringify(messageRecord))
 
+          if (messageRecord.testId) {
+            const statsKey = `test:${messageRecord.testId}:stats`
+            await this.redisClient.hincrby(statsKey, 'totalMessages', 1)
+            await this.redisClient.hincrby(statsKey, 'totalProcessingTimeMs', processedTime)
+          }
+
           this.logger.info(
             `Message processed for Tenant: ${tenantId}, ThreadId: ${threadId}, Processing Time: ${processedTime}ms`,
           )
-          logStream.write(
-            `Message processed for Tenant: ${tenantId}, ThreadId: ${threadId}, Processing Time: ${processedTime}ms\n`,
+          logWrite(
+            `Message processed for Tenant: ${tenantId}, ThreadId: ${threadId}, Processing Time: ${processedTime}ms`,
           )
         } else {
           this.logger.warn(`Message with ThreadId ${threadId} not found in Redis for Tenant: ${tenantId}`)
-          logStream.write(`Message with ThreadId ${threadId} not found in Redis for Tenant: ${tenantId}\n`)
+          logWrite(`Message with ThreadId ${threadId} not found in Redis for Tenant: ${tenantId}`)
         }
       } catch (error) {
         this.logger.error(`Error processing message for Tenant: ${tenantId}, ThreadId: ${threadId}: ${error.message}`)
-        logStream.write(`Error processing message for Tenant: ${tenantId}, ThreadId: ${threadId}: ${error.message}\n`)
+        logWrite(`Error processing message for Tenant: ${tenantId}, ThreadId: ${threadId}: ${error.message}`)
       }
     })
   }

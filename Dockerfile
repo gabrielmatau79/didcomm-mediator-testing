@@ -15,10 +15,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package files first to leverage Docker layer caching
-COPY package.json yarn.lock ./
+
+COPY package.json pnpm-lock.yaml ./
 
 # Install application dependencies
-RUN yarn install
+RUN corepack enable && pnpm install --frozen-lockfile 
+
 
 # Copy application source code and configuration
 COPY ./src ./src
@@ -26,7 +28,9 @@ COPY tsconfig.json tsconfig.json
 COPY tsconfig.build.json tsconfig.build.json
 
 # Build the application
-RUN yarn build
+
+RUN pnpm build
+
 
 # Define a volume for external configuration files
 VOLUME /app/dist/config
@@ -35,4 +39,4 @@ VOLUME /app/dist/config
 EXPOSE 3001
 
 # Command to start the application when the container runs
-CMD ["yarn", "start"]
+CMD ["pnpm", "start"]

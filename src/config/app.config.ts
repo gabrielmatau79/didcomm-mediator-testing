@@ -29,4 +29,34 @@ export default registerAs('appConfig', () => ({
    */
 
   LogLevel: process.env.LOG_LEVEL || 1,
+
+  /**
+   * Enable or disable per-agent log files and event registration.
+   */
+  enableAgentLogs: process.env.ENABLE_AGENT_LOGS ? process.env.ENABLE_AGENT_LOGS.toLowerCase() === 'true' : true,
+
+  /**
+   * Maximum number of tenants allowed.
+   */
+  maxTenants: parseInt(process.env.MAX_TENANTS, 10) || 50,
+
+  /**
+   * Maximum number of concurrent messages per agent during simulations.
+   */
+  maxConcurrentMessages: parseInt(process.env.MAX_CONCURRENT_MESSAGES, 10) || 5,
+
+  /**
+   * Delay before cleaning up agents (ms) to allow in-flight processing to finish.
+   */
+  agentCleanupDelayMs: parseInt(process.env.AGENT_CLEANUP_DELAY_MS, 10) || 10000,
+
+  /**
+   * Maximum number of agents created concurrently during simulations.
+   */
+  maxConcurrentAgentCreation: parseInt(process.env.MAX_CONCURRENT_AGENT_CREATION, 10) || 2,
+
+  /**
+   * Directory where reports are stored.
+   */
+  reportsDir: process.env.REPORTS_DIR || `${process.cwd()}/reports`,
 }))

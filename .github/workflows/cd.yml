@@ -1,0 +1,83 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [main, "release/**"]
+  workflow_dispatch:
+
+env:
+  DH_USERNAME: ${{secrets.DH_USERNAME}}
+  DH_TOKEN: ${{secrets.DH_TOKEN}}
+  IMAGE_NAME: "didcomm-mediator"
+  IMAGE_TAG: ${{ github.ref == 'refs/heads/main' && 'dev' || github.ref }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout didcomm-mediator
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js v22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - uses: codfish/semantic-release-action@v3
+        id: semantic
+        with:
+          branches: |
+            [
+              'release',
+              {
+                name: 'main',
+                prerelease: 'dev'
+              }
+            ]
+          plugins: |
+            [
+              [
+                "@semantic-release/commit-analyzer",
+                {
+                  "preset": "angular",
+                  "releaseRules": [
+                    {
+                      "type": "refactor",
+                      "release": "patch"
+                    }
+                  ]
+                }
+              ],
+              [
+                "@semantic-release/npm",
+                {
+                  "npmPublish": false
+                }
+              ],
+              "@semantic-release/release-notes-generator"
+            ]
+
+      - name: Log in to Docker Hub
+        if: steps.semantic.outputs.new-release-published == 'true'
+        run: |
+          echo "$DH_TOKEN" | docker login -u "$DH_USERNAME" --password-stdin
+
+      - name: Build Docker image
+        if: steps.semantic.outputs.new-release-published == 'true'
+        run: |
+          docker build -f Dockerfile -t $DH_USERNAME/$IMAGE_NAME:$IMAGE_TAG .
+
+      - name: Push Docker tags (version + latest)
+        if: steps.semantic.outputs.new-release-published == 'true'
+        run: |
+          docker tag $DH_USERNAME/$IMAGE_NAME:$IMAGE_TAG $DH_USERNAME/$IMAGE_NAME:v$RELEASE_VERSION
+          docker tag $DH_USERNAME/$IMAGE_NAME:$IMAGE_TAG $DH_USERNAME/$IMAGE_NAME:latest
+          docker push $DH_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+          docker push $DH_USERNAME/$IMAGE_NAME:v$RELEASE_VERSION
+          docker push $DH_USERNAME/$IMAGE_NAME:latest

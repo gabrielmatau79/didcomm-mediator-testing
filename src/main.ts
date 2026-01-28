@@ -68,6 +68,24 @@ async function bootstrap(): Promise<void> {
 
   // Log the URL where the application is running
   logger.log(`Application (${appName} v${appVersion}) running on: ${await app.getUrl()} `)
+  logger.log(
+    `[Config] ${JSON.stringify(
+      {
+        appPort: configService.get('appConfig.appPort'),
+        redisDbUrl: configService.get('appConfig.redisDbUrl'),
+        publicDid: configService.get('appConfig.publicDid'),
+        logLevel: configService.get('appConfig.LogLevel'),
+        enableAgentLogs: configService.get('appConfig.enableAgentLogs'),
+        maxTenants: configService.get('appConfig.maxTenants'),
+        maxConcurrentMessages: configService.get('appConfig.maxConcurrentMessages'),
+        agentCleanupDelayMs: configService.get('appConfig.agentCleanupDelayMs'),
+        maxConcurrentAgentCreation: configService.get('appConfig.maxConcurrentAgentCreation'),
+        reportsDir: configService.get('appConfig.reportsDir'),
+      },
+      null,
+      2,
+    )}`,
+  )
 }
 
 // Start the application

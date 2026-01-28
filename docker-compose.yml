@@ -1,4 +1,4 @@
-version: '3.9'
+version: "3.9"
 
 services:
   didcomm-mediator-testing:
@@ -6,12 +6,18 @@ services:
     image: didcomm-mediator-testing:test
     container_name: didcomm-mediator-testing
     ports:
-      - '3001:3001'
+      - "3001:3001"
     environment:
-      APP_PORT: 3001
-      REDIS_URL: redis://redis:6379
-      AGENT_PUBLIC_DID: did:web:ca.dev.2060.io
-      LOG_LEVEL: 2
+      APP_PORT: ${APP_PORT}
+      REDIS_URL: ${REDIS_URL}
+      AGENT_PUBLIC_DID: ${AGENT_PUBLIC_DID}
+      LOG_LEVEL: ${LOG_LEVEL}
+      ENABLE_AGENT_LOGS: ${ENABLE_AGENT_LOGS}
+      MAX_TENANTS: ${MAX_TENANTS}
+      MAX_CONCURRENT_MESSAGES: ${MAX_CONCURRENT_MESSAGES}
+      AGENT_CLEANUP_DELAY_MS: ${AGENT_CLEANUP_DELAY_MS}
+      MAX_CONCURRENT_AGENT_CREATION: ${MAX_CONCURRENT_AGENT_CREATION}
+      REPORTS_DIR: ${REPORTS_DIR}
     depends_on:
       - redis
     networks:
@@ -27,8 +33,13 @@ services:
       - 6379:6379
     networks:
       - loadbalancing
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - redis-data:/data
 
 networks:
   loadbalancing:
     external: true
+
+volumes:
+  redis-data:

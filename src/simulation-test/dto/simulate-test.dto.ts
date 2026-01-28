@@ -34,6 +34,22 @@ export class SimulateTestDto {
   nameAgent: string
 
   @ApiProperty({
+    description: 'Name of the test',
+    example: 'Load Test - Mediator v1',
+  })
+  @IsString()
+  testName: string
+
+  @ApiProperty({
+    description: 'Optional description of the test',
+    example: 'Baseline test for mediator throughput',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  testDescription?: string
+
+  @ApiProperty({
     description: 'Optional message rate in milliseconds',
     example: 100,
     required: false,
