@@ -1,6 +1,7 @@
 {
   "moduleNameMapper": {
-    "^src/(.*)$": "<rootDir>/../src/$1"
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^@openwallet-foundation/askar-nodejs$": "<rootDir>/__mocks__/askar-nodejs.ts"
   },
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",

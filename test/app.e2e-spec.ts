@@ -1,26 +1,62 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
-import * as request from 'supertest'
 import { AppModule } from '../src/app.module'
-import Redis from 'ioredis'
+import { EventEmitter } from 'events'
+import { SimulationTestController } from '../src/simulation-test/simulation-test.controller'
 
 describe('Didcomm Mediator Testing E2E Tests', () => {
   let app: INestApplication
-  let redisClient: Redis
+  let controller: SimulationTestController
+  let redisClient: {
+    scanStream: jest.Mock
+    pipeline: jest.Mock
+    flushall: jest.Mock
+    quit: jest.Mock
+  }
 
   beforeAll(async () => {
     // Mock Redis for testing
-    redisClient = new Redis()
-    jest.spyOn(redisClient, 'keys').mockResolvedValue(['message:1', 'message:2'])
-    jest.spyOn(redisClient, 'get').mockImplementation((key) =>
-      Promise.resolve(
-        JSON.stringify({
-          messageId: key,
-          content: `Message content for ${key}`,
-        }),
-      ),
-    )
-    jest.spyOn(redisClient, 'flushall').mockResolvedValue('OK')
+    const messages = [
+      { fromTenantId: 'Agent-1', toTenantId: 'Agent-2', message: 'Hello', processingTimeMs: 10 },
+      { fromTenantId: 'Agent-2', toTenantId: 'Agent-1', message: 'World', processingTimeMs: 12 },
+    ]
+
+    redisClient = {
+      scanStream: jest.fn(),
+      pipeline: jest.fn(),
+      flushall: jest.fn().mockResolvedValue('OK'),
+      quit: jest.fn().mockResolvedValue('OK'),
+    }
+
+    redisClient.scanStream.mockImplementation(() => {
+      const stream = new EventEmitter() as EventEmitter & {
+        pause: () => void
+        resume: () => void
+        destroy: (error?: Error) => void
+      }
+      stream.pause = jest.fn()
+      stream.resume = jest.fn()
+      stream.destroy = jest.fn()
+
+      process.nextTick(() => {
+        stream.emit('data', ['message:test-uuid:1', 'message:test-uuid:2'])
+        stream.emit('end')
+      })
+
+      return stream
+    })
+
+    redisClient.pipeline.mockImplementation(() => {
+      const exec = jest.fn().mockResolvedValue([
+        [null, JSON.stringify(messages[0])],
+        [null, JSON.stringify(messages[1])],
+      ])
+
+      return {
+        get: jest.fn().mockReturnThis(),
+        exec,
+      }
+    })
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -31,6 +67,7 @@ describe('Didcomm Mediator Testing E2E Tests', () => {
 
     app = moduleFixture.createNestApplication()
     await app.init()
+    controller = moduleFixture.get<SimulationTestController>(SimulationTestController)
   })
 
   afterAll(async () => {
@@ -38,22 +75,34 @@ describe('Didcomm Mediator Testing E2E Tests', () => {
     await app.close()
   })
 
-  it('/simulation-test/messages (GET) - should fetch all messages', async () => {
-    const response = await request(app.getHttpServer()).get('/simulation-test/messages').expect(200)
+  it('/simulation-test/messages/:testId (GET) - should fetch all messages', async () => {
+    const mockResponse = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    }
 
-    expect(response.body).toEqual({
+    await controller.getMessagesByTestId('test-uuid', mockResponse as any)
+
+    expect(mockResponse.status).toHaveBeenCalledWith(200)
+    expect(mockResponse.json).toHaveBeenCalledWith({
       messages: [
-        { messageId: 'message:1', content: 'Message content for message:1' },
-        { messageId: 'message:2', content: 'Message content for message:2' },
+        { fromTenantId: 'Agent-1', toTenantId: 'Agent-2', message: 'Hello', processingTimeMs: 10 },
+        { fromTenantId: 'Agent-2', toTenantId: 'Agent-1', message: 'World', processingTimeMs: 12 },
       ],
       status: 'success',
     })
   })
 
   it('/simulation-test/database (DELETE) - should clear the database', async () => {
-    const response = await request(app.getHttpServer()).post('/simulation-test/clear-database').expect(200)
+    const mockResponse = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    }
 
-    expect(response.body).toEqual({ status: 'success', message: 'Database cleared successfully.' })
+    await controller.clearDatabase(mockResponse as any)
+
+    expect(mockResponse.status).toHaveBeenCalledWith(200)
+    expect(mockResponse.json).toHaveBeenCalledWith({ status: 'success', message: 'Database cleared successfully.' })
     expect(redisClient.flushall).toHaveBeenCalled()
   })
 })

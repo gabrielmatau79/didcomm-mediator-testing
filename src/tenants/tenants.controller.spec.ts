@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { TenantsController } from './tenants.controller'
 import { TenantsService } from './tenants.service'
 
+jest.mock('@openwallet-foundation/askar-nodejs', () => ({ ariesAskar: {} }))
+
 describe('TenantsController', () => {
   let controller: TenantsController
   let service: TenantsService
