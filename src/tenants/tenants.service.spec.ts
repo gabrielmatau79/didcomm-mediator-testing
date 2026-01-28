@@ -2,11 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { TenantsService } from './tenants.service'
 import { AgentFactory } from '../lib/agents/agent.factory'
 import Redis from 'ioredis'
+import { ConfigService } from '@nestjs/config'
+
+jest.mock('@openwallet-foundation/askar-nodejs', () => ({ ariesAskar: {} }))
 
 describe('TenantsService', () => {
   let service: TenantsService
   let agentFactoryMock: AgentFactory
   let redisMock: Redis
+  let configServiceMock: ConfigService
 
   beforeEach(async () => {
     // Mock AgentFactory
@@ -22,6 +26,7 @@ describe('TenantsService', () => {
         wallet: {
           delete: jest.fn().mockResolvedValue(true),
         },
+        shutdown: jest.fn().mockResolvedValue(undefined),
       }),
     } as unknown as AgentFactory
 
@@ -33,11 +38,16 @@ describe('TenantsService', () => {
       flushall: jest.fn().mockResolvedValue('OK'),
     } as unknown as Redis
 
+    configServiceMock = {
+      get: jest.fn().mockReturnValue(10),
+    } as unknown as ConfigService
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TenantsService,
         { provide: AgentFactory, useValue: agentFactoryMock },
         { provide: 'default_IORedisModuleConnectionToken', useValue: redisMock },
+        { provide: ConfigService, useValue: configServiceMock },
       ],
     }).compile()
 
@@ -63,6 +73,17 @@ describe('TenantsService', () => {
       service['tenants'][tenantId] = { agent: {} as any }
 
       await expect(service.createTenant(tenantId)).rejects.toThrowError(`Tenant ${tenantId} already exists`)
+    })
+
+    it('should throw an error if max tenants limit is reached', async () => {
+      const tenantId = 'TenantOverflow'
+      service['tenants'] = {
+        Tenant1: { agent: {} as any },
+        Tenant2: { agent: {} as any },
+      }
+      jest.spyOn(configServiceMock, 'get').mockReturnValueOnce(2)
+
+      await expect(service.createTenant(tenantId)).rejects.toThrowError(/Max tenants limit \(2\) reached/)
     })
   })
 
@@ -149,6 +170,7 @@ describe('TenantsService', () => {
     it('should delete a tenant successfully', async () => {
       const tenantId = 'TestTenant'
       const mockAgent = {
+        shutdown: jest.fn().mockResolvedValue(undefined),
         wallet: { delete: jest.fn().mockResolvedValue(true) },
       }
 
@@ -156,6 +178,7 @@ describe('TenantsService', () => {
 
       const result = await service.deleteTenant(tenantId)
 
+      expect(mockAgent.shutdown).toHaveBeenCalled()
       expect(mockAgent.wallet.delete).toHaveBeenCalled()
       expect(service['tenants'][tenantId]).toBeUndefined()
       expect(result).toEqual({ status: `Tenant ${tenantId} has been successfully deleted` })

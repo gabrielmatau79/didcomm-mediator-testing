@@ -3,6 +3,7 @@ import { Agent } from '@credo-ts/core'
 import { AgentFactory } from '../lib/agents/agent.factory'
 import { InjectRedis } from '@nestjs-modules/ioredis'
 import Redis from 'ioredis'
+import { ConfigService } from '@nestjs/config'
 
 @Injectable()
 export class TenantsService {
@@ -12,6 +13,7 @@ export class TenantsService {
   constructor(
     private readonly agentFactory: AgentFactory,
     @InjectRedis() private readonly redisClient: Redis,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -25,6 +27,13 @@ export class TenantsService {
     if (this.tenants[tenantId]) {
       this.logger.error(`[createTenant] Tenant ${tenantId} already exists`)
       throw new Error(`[createTenant] Tenant ${tenantId} already exists`)
+    }
+
+    const maxTenants = this.configService.get<number>('appConfig.maxTenants') || 50
+    if (Object.keys(this.tenants).length >= maxTenants) {
+      const message = `[createTenant] Max tenants limit (${maxTenants}) reached`
+      this.logger.error(message)
+      throw new Error(message)
     }
 
     const agent = await this.agentFactory.createAgent(tenantId)
@@ -103,6 +112,7 @@ export class TenantsService {
     fromTenantId: string,
     toTenantId: string,
     message: string,
+    testId?: string,
   ): Promise<{ status: string; response: any }> {
     const fromAgent = this.getTenantAgent(fromTenantId)
     const toAgent = this.getTenantAgent(toTenantId)
@@ -114,9 +124,13 @@ export class TenantsService {
       const threadId = response.threadId
       const timestamp = new Date().toISOString()
 
-      const messageRecord = { fromTenantId, toTenantId, message, timestamp }
+      const messageRecord = { testId, fromTenantId, toTenantId, message, timestamp, threadId }
+      const messageKey = testId ? `message:${testId}:${threadId}` : `message:${threadId}`
 
-      await this.redisClient.set(`message:${threadId}`, JSON.stringify(messageRecord))
+      await this.redisClient.set(messageKey, JSON.stringify(messageRecord))
+      if (testId) {
+        await this.redisClient.set(`message-index:${threadId}`, testId)
+      }
       this.logger.log(`[sendMessage] Message sent from ${fromTenantId} to ${toTenantId}`)
       return { status: `Message sent from ${fromTenantId} to ${toTenantId}`, response }
     } catch (error) {
@@ -139,8 +153,8 @@ export class TenantsService {
     }
 
     try {
-      await tenant.agent.wallet.delete()
       await tenant.agent.shutdown()
+      await tenant.agent.wallet.delete()
       delete this.tenants[tenantId]
       this.logger.log(`[deleteTenant] Tenant ${tenantId} deleted successfully`)
       return { status: `Tenant ${tenantId} has been successfully deleted` }
