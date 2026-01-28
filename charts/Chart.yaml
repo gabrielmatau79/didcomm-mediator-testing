@@ -1,0 +1,5 @@
+name: didcomm-mediator-testing-chart
+description: A Helm chart for deploying didcomm-mediator-testing
+apiVersion: v2
+version: 0.0.1
+appVersion: '0.1.0'

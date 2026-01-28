@@ -1,0 +1,78 @@
+# Global configuration for the application
+global:
+  domain: host.test.test
+
+# General configuration
+name: didcomm-mediator-testing
+host: test
+replicas: 1
+
+# Image configuration
+image:
+  repository: gabrielmatau79/didcomm-mediator-testing
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 3001
+  targetPort: 3001
+
+# Node scheduling preferences
+nodeSelector:
+  kubernetes.io/hostname: cluster-utc-node-07efe5
+
+# Environment variables consumed by the application
+env:
+  APP_PORT: '3001'
+  REDIS_URL: 'redis://didcomm-mediator-testing-redis:6379'
+  AGENT_PUBLIC_DID: 'did:web:test.dev.example.com'
+  LOG_LEVEL: '2'
+  ENABLE_AGENT_LOGS: 'false'
+  MAX_TENANTS: '50'
+  MAX_CONCURRENT_MESSAGES: '5'
+  AGENT_CLEANUP_DELAY_MS: '10000'
+  MAX_CONCURRENT_AGENT_CREATION: '2'
+  REPORTS_DIR: '/usr/src/app/reports'
+
+# Additional env variables if needed (list of {name, value})
+extraEnv: []
+
+# Resource requests/limits for the backend container
+resources: {}
+
+# Optional ingress configuration
+ingress:
+  enabled: true
+  host: '{{ .Values.host }}.{{ .Values.global.domain }}'
+  tlsSecret: public.{{ .Values.host }}.{{ .Values.global.domain }}-cert
+  public:
+    enableCors: true
+  private:
+    enableCors: true
+    whitelistSourceRange: '' # e.g. "xxx.xx.xxx.xxx/32"
+    tlsSecret: 'private.{{ .Values.host }}.{{ .Values.global.domain }}-cert'
+    host: ''
+
+# Redis configuration
+redis:
+  name: didcomm-mediator-testing-redis
+  image:
+    repository: redis
+    tag: alpine
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+    targetPort: 6379
+  command:
+    - redis-server
+    - --maxmemory
+    - 64mb
+    - --maxmemory-policy
+    - allkeys-lru
+    - --appendonly
+    - 'yes'
+  resources: {}
+  persistence:
+    claimName: didcomm-mediator-testing-redis-pvc
