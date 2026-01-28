@@ -5,22 +5,19 @@ This application is a NestJS-based messaging simulation system designed for test
 ## Features
 
 1. **Agent Management**:
-
    - Dynamic creation and cleanup of agents.
    - Establishes connections between all agents.
 
 2. **Message Simulation**:
-
    - Configurable parameters for number of agents, messages per connection, and simulation duration.
    - Concurrent and randomized message delivery.
 
 3. **Metrics and Tracking**:
-
    - Tracks messages and their processing times in Redis.
    - Provides detailed metrics for message performance.
 
 4. **Swagger Integration**:
-   - Fully documented API endpoints using Swagger.
+   - Fully documented API endpoints using Swagger at `http://localhost:3001/api`.
 
 ## Environment Variables
 
@@ -38,7 +35,6 @@ Below are the environment variables supported by the application. These can be s
 | `AGENT_CLEANUP_DELAY_MS`        | `10000`                  | Delay (ms) before deleting agents/wallets after a test.                        |
 | `MAX_CONCURRENT_AGENT_CREATION` | `2`                      | Maximum number of agents created concurrently during simulations.              |
 | `REPORTS_DIR`                   | `./reports`              | Directory where report files are stored.                                       |
-
 
 ## Getting Started
 
@@ -82,6 +78,55 @@ $ pnpm start:prod
    Open [http://localhost:3001/doc](http://localhost:3001/doc) in your browser.
 
 ## Usage
+
+### How to use with Docker Compose
+
+1. Ensure the `loadbalancing` network exists:
+
+```bash
+docker network create loadbalancing
+```
+
+1. Start the stack:
+
+```bash
+docker-compose up --build
+```
+
+1. Trigger a simulation:
+
+```bash
+curl -X POST http://localhost:3001/simulation-test \
+  -H "Content-Type: application/json" \
+  -d '{"messagesPerConnection":1,"timestampTestInterval":5000,"numAgent":2,"nameAgent":"Agent","testName":"Smoke test"}'
+```
+
+1. Stop the stack:
+
+```bash
+docker-compose down
+```
+
+### How to use with Helm
+
+1. Install/upgrade the chart (example namespace and domain):
+
+```bash
+helm upgrade --install didcomm-mediator-testing ./charts \
+  -n didcomm \
+  --set global.domain=example.com \
+  --set image.repository=gabrielmatau79/didcomm-mediator-testing \
+  --set image.tag=latest \
+  --set env.REDIS_URL=redis://didcomm-mediator-testing-redis:6379
+```
+
+1. Trigger a simulation (replace host if using ingress):
+
+```bash
+curl -X POST http://didcomm-mediator-testing.example.com/simulation-test \
+  -H "Content-Type: application/json" \
+  -d '{"messagesPerConnection":1,"timestampTestInterval":5000,"numAgent":2,"nameAgent":"Agent","testName":"Smoke test"}'
+```
 
 ### Endpoints
 

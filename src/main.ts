@@ -50,7 +50,7 @@ async function bootstrap(): Promise<void> {
     .addTag('Tenants')
     .build()
   const document = SwaggerModule.createDocument(app, config)
-  SwaggerModule.setup('doc', app, document)
+  SwaggerModule.setup('api', app, document)
 
   // Enable Cross-Origin Resource Sharing (CORS)
   app.enableCors()
