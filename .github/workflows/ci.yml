@@ -23,20 +23,21 @@ jobs:
 
       - name: Install dependencies
         run: |
-          yarn install
+          corepack enable
+          pnpm install --frozen-lockfile
 
       - name: Check Format
         run: |
-          yarn format
+          pnpm format
 
       - name: Check Types
         run: |
-          yarn check-types
+          pnpm check-types
 
       - name: Unit tests
         run: |
-          yarn test
+          pnpm test
 
       - name: E2E tests
         run: |
-          yarn test:e2e
+          pnpm test:e2e
