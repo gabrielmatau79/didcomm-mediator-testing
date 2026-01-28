@@ -26,20 +26,26 @@ This application is a NestJS-based messaging simulation system designed for test
 
 Below are the environment variables supported by the application. These can be set in a `.env` file in the project root.
 
-| Variable           | Default Value            | Description                                                                    |
-| ------------------ | ------------------------ | ------------------------------------------------------------------------------ |
-| `APP_PORT`         | `3001`                   | The port on which the application will run.                                    |
-| `REDIS_URL`        | `redis://localhost:6379` | URL for the Redis instance used for message tracking.                          |
-| `AGENT_PUBLIC_DID` | ``                       | Public DID for agent configuration.                                            |
-| `LOG_LEVEL`        | `1`                      | Log verbosity level: `1` = log, error `2` = log, debu `3` = log, debug, error. |
+| Variable                        | Default Value            | Description                                                                    |
+| ------------------------------- | ------------------------ | ------------------------------------------------------------------------------ |
+| `APP_PORT`                      | `3001`                   | The port on which the application will run.                                    |
+| `REDIS_URL`                     | `redis://localhost:6379` | URL for the Redis instance used for message tracking.                          |
+| `AGENT_PUBLIC_DID`              | ``                       | Public DID for agent configuration.                                            |
+| `LOG_LEVEL`                     | `1`                      | Log verbosity level: `1` = log, error `2` = log, debu `3` = log, debug, error. |
+| `ENABLE_AGENT_LOGS`             | `true`                   | Enable per-agent log files and event handlers.                                 |
+| `MAX_TENANTS`                   | `50`                     | Maximum number of tenants allowed simultaneously.                              |
+| `MAX_CONCURRENT_MESSAGES`       | `5`                      | Maximum concurrent message sends per agent during simulations.                 |
+| `AGENT_CLEANUP_DELAY_MS`        | `10000`                  | Delay (ms) before deleting agents/wallets after a test.                        |
+| `MAX_CONCURRENT_AGENT_CREATION` | `2`                      | Maximum number of agents created concurrently during simulations.              |
+| `REPORTS_DIR`                   | `./reports`              | Directory where report files are stored.                                       |
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js (v18+ recommended)
+- Node.js (v22+ recommended)
 - Redis (Running locally, accessible remotely)
-- Yarn (for dependency management)
+- pnpm (for dependency management)
 
 ### Installation
 
@@ -53,7 +59,7 @@ cd didcomm-mediator-testing
 1. Install dependencies:
 
 ```bash
-yarn install
+pnpm install
 ```
 
 1. Start Redis (if not already running) or use docker compose file
@@ -62,13 +68,13 @@ yarn install
 
 ```bash
 # development
-$ yarn run start
+$ pnpm start
 
 # watch mode
-$ yarn run start:dev
+$ pnpm start:dev
 
 # production mode
-$ yarn run start:prod
+$ pnpm start:prod
 ```
 
 1. Access Swagger UI:
@@ -90,6 +96,8 @@ $ yarn run start:prod
   POST /simulation-test
   ```
 
+  The response includes a `testId` you can use to query messages, metrics, and reports.
+
   Example payload:
 
   ```api
@@ -97,28 +105,80 @@ $ yarn run start:prod
     "messagesPerConnection": 10,
     "timestampTestInterval": 60000,
     "numAgent": 3,
-    "nameAgent": "Agent"
+    "nameAgent": "Agent",
+    "testName": "Load Test - Mediator v1",
+    "testDescription": "Baseline test for mediator throughput"
   }
   ```
 
 1. **Metrics**:
 
-- Retrieve messages:
+- Retrieve messages by test ID:
 
   ```api
-  GET /simulation-test/messages
+  GET /simulation-test/messages/:testId
   ```
 
-- Retrieve metrics:
+- Retrieve metrics by test ID:
 
   ```api
-  GET /simulation-test/metrics
+  GET /simulation-test/metrics/:testId
   ```
 
-- Retrieve total metrics:
+- Retrieve total metrics by test ID:
 
   ```api
-  GET /simulation-test/metrics/totals
+  GET /simulation-test/metrics/:testId/totals
+  ```
+
+1. **Reports**:
+
+- Generate and download a report:
+
+  ```api
+  GET /simulation-test/reports/:testId
+  ```
+
+  Reports are also written locally to `reports/report-<testId>.json`.
+
+- Download consolidated report (config + totals + messages):
+
+  ```api
+  GET /simulation-test/reports/:testId/consolidated
+  ```
+
+  Consolidated reports are also written locally to `reports/report-<testId>-consolidated.json`.
+
+1. **Tests**:
+
+- List all tests stored in Redis:
+
+  ```api
+  GET /simulation-test/tests
+  ```
+
+1. **Activate tenants**:
+
+- Create tenants for a test to receive delayed messages, then auto-delete:
+
+  ```api
+  POST /simulation-test/activate/:testId
+  ```
+
+  Optional payload:
+
+  ```api
+  {
+    "cleanupDelayMs": 10000
+  }
+  ```
+
+1. **Stop a running test**:
+
+- Request stop for a running simulation:
+
+  ```api
+  POST /simulation-test/stop/:testId
   ```
 
 ## Docker Setup
