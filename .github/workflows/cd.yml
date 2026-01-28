@@ -5,15 +5,22 @@ on:
     branches: [main, "release/**"]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+
 env:
   DH_USERNAME: ${{secrets.DH_USERNAME}}
   DH_TOKEN: ${{secrets.DH_TOKEN}}
-  IMAGE_NAME: "didcomm-mediator"
+  IMAGE_NAME: "didcomm-mediator-testing"
   IMAGE_TAG: ${{ github.ref == 'refs/heads/main' && 'dev' || github.ref }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout didcomm-mediator
         uses: actions/checkout@v4
@@ -31,6 +38,8 @@ jobs:
 
       - uses: codfish/semantic-release-action@v3
         id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           branches: |
             [
